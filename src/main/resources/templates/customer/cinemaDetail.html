@@ -1,0 +1,43 @@
+{#include base}
+{#title}{site.name}{/title}
+{#head}{#include seoHead /}{/head}
+<p><a href="{inject:lang.path('/cities/')}{site.city.urlEncoded}">&larr; {msg:citiesTitle(site.city)}</a></p>
+<h1>{site.name}</h1>
+<p class="muted">
+    {site.city}{#if site.province}, {site.province}{/if}
+    {#if site.address}<br>{site.address}{/if}
+</p>
+
+<h2>{msg:cinemaWhatsPlaying}</h2>
+{!
+  The films are the list, and picking one opens its showtimes at THIS branch
+  underneath — the same fragment the film page opens from the other direction.
+
+  THE hx-get GOES THROUGH lang.path TOO, and it has to. A fragment fetched without the prefix
+  falls through to the cookie and then to Accept-Language — which in this market is very commonly
+  en-US whoever is holding the phone (LanguagePreference) — so a visitor who arrived on /id from a
+  pasted link, holding no cookie, would get English copy swapped into an Indonesian page. The rule
+  that decides which URLs carry the prefix is robots.txt's: a path it allows takes the prefix, a
+  path it disallows (/booking, /orders) stays bare so it does not gain a second spelling that list
+  does not cover. This one is allowed.
+!}
+{#for film in films}
+<div class="card">
+    <h3><a href="{inject:lang.path('/movies/')}{film.slug}">{film.title}</a></h3>
+    <p class="muted">
+        {#if film.classification}<span class="badge">{film.classification}</span>{/if}
+        {#if film.durationMinutes}{msg:filmDuration(film.durationMinutes)}{/if}
+    </p>
+    <p>
+        <button type="button" class="showtimes-toggle"
+                hx-get="{inject:lang.path('/cinemas/')}{site.slug}/films/{film.slug}"
+                hx-target="#showtimes-{film.filmId}"
+                hx-swap="innerHTML">{msg:showTimes}</button>
+    </p>
+    <div id="showtimes-{film.filmId}"></div>
+</div>
+{#else}
+{! Distinguishable from "this branch does not exist", which is a 404 — see showtimesFragment. !}
+<p class="muted">{msg:cinemaEmpty}</p>
+{/for}
+{/include}

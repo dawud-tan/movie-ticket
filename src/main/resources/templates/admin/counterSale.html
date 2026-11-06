@@ -1,0 +1,78 @@
+{#include base}
+{#title}{msg:admCounterSale} — {showing.label}{/title}
+<p><a href="/admin/halls/{hall.resourcePoolId}">&larr; {hall.name}</a></p>
+<h1>{msg:admCounterSale}</h1>
+<p class="muted">{hall.name} &mdash; {showing.label} &mdash; {showing.startsAt.fmtDateTime}</p>
+
+{! Still English: the hold refusals now come from BookingService's bundle, but anything else
+   that lands here does not. !}
+{#if errorMessage}
+<div class="error-banner">{errorMessage}</div>
+{/if}
+
+<div class="card">
+  {!
+    No name/phone fields, unlike the customer seat map: a walk-in paying cash leaves no
+    identity and wants no account, so the booking attaches to the tenant's Walk-in
+    placeholder customer instead. Asking staff to invent contact details at the counter would
+    put fictional data into customer rows that reports later join through.
+
+    .raw because "Walk-in Customer" is the name of a row in the tenant's own data, and bold is
+    what tells staff it is a thing that exists rather than a turn of phrase.
+  !}
+  <p class="muted">{msg:admCounterWalkIn.raw}</p>
+
+  {! The age attestation: shown, never ticked. The counter does not attest on a walk-in's behalf — every
+     walk-in shares one customer row, so a tick there would claim an attestation for everybody who
+     buys at the desk afterwards — and the customer is standing in front of staff, which is where
+     the age attestation puts enforcement anyway. What this screen owes staff is the rating itself.
+
+     The classification itself (SU, 13+, 17+, 21+) is LSF's vocabulary and is not translated. !}
+  {#if ageGate}
+  <p class="muted">{msg:admCounterAgeClassification} <span class="badge">{ageGate.classification}</span>{#if ageGate.restricted}
+    &mdash; {msg:admCounterCheckId}{/if}</p>
+  {/if}
+
+  <div class="legend">
+    <span><span class="dot available"></span>{inject:status.of('available')}</span>
+    <span><span class="dot held"></span>{inject:status.of('held')}</span>
+    <span><span class="dot confirmed"></span>{inject:status.of('confirmed')}</span>
+    {#if rows.anyAccessible}<span><span aria-hidden="true">&#9855;</span> {msg:seatAccessible}</span>{/if}
+  </div>
+
+  <form method="post" action="/admin/counter/showings/{showing.resourcePoolSessionId}/hold">
+    <div class="seat-grid">
+      {#for row in rows}
+      <div class="seat-row">
+        <span class="row-label">{row.rowLabel}</span>
+        {#for seat in row.seats}
+          {#if seat.seatStatus == 'available'}
+          <label class="seat available" data-accessible="{seat.accessible}" title="{seat.label}{#if seat.accessible} ({msg:seatAccessible}){/if}">
+            <input type="checkbox" name="seatIds" value="{seat.resourceUnitId}">
+            {seat.label}
+          </label>
+          {#else}
+          <span class="seat {seat.seatStatus}" data-accessible="{seat.accessible}" title="{seat.label} ({inject:status.of(seat.seatStatus)})">{seat.label}</span>
+          {/if}
+        {/for}
+      </div>
+      {/for}
+    </div>
+
+    {! The band is named for staff too: the desk quotes the number, and "why is tonight 35" is a
+       question asked at the counter rather than of the software. The band label itself is
+       CalendarPricing's, not a message — see hallDetail.html's pricing table. !}
+    {#if price}
+    <p class="muted">{msg:admCounterPerSeat(price.amount.fmtMoney)}{#if price.bandLabel} <span class="badge">{price.bandLabel}</span>{/if}</p>
+    {#if price.inclusions}
+    <p class="muted">{msg:admCounterIncludes} {#for line in price.inclusions}{line}{#if !line_isLast}; {/if}{/for}</p>
+    {/if}
+    {/if}
+
+    <p>
+      <button type="submit">{msg:admHoldSelectedSeats}</button>
+      <a class="button-secondary" href="/admin/counter/showings/{showing.resourcePoolSessionId}">{msg:admRefreshAvailability}</a>
+    </p>
+  </form>
+</div>
+{/include}

@@ -1,0 +1,20 @@
+{#include base}
+{#title}{hall.name} — {msg:showtimes}{/title}
+{#head}{#include seoHead /}{/head}
+<p><a href="{inject:lang.path('/')}">&larr; {msg:showingsBackAllVenues}</a></p>
+<h1>{hall.name}</h1>
+{#if hall.address}<p class="muted">{hall.address}</p>{/if}
+
+<h2>{msg:showingsUpcoming}</h2>
+{#for showing in showings}
+<div class="card">
+    <h3>{showing.label}</h3>
+    {! The class keeps the raw column value — the stylesheet selects on it — and only the label
+       is translated. StatusLabels says why the two cannot be the same expression. !}
+    <p class="muted">{showing.startsAt.fmtDateTime} &mdash; <span class="badge {showing.status}">{inject:status.of(showing.status)}</span></p>
+    <a class="button" href="{inject:lang.path('/halls/')}{hall.resourcePoolId}/showings/{showing.resourcePoolSessionId}">{msg:showingsViewSeatMap}</a>
+</div>
+{#else}
+<p class="muted">{msg:noUpcomingShowings}</p>
+{/for}
+{/include}

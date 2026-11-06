@@ -1,0 +1,29 @@
+{!
+  The sign-in sheet an anonymous visitor gets when they tap a showtime.
+
+  Everything about it is markup. There is no JavaScript behind the sheet at all: it is swapped in
+  by htmx, and the only way out of it is the sign-in link or the dismiss button, which empties the
+  container it lives in. Same principle as the seat map's revert — the behaviour is in what
+  is rendered, not in a script that has to agree with it.
+
+  The sign-in href comes from SignInLink and never from a literal "/login": a relative /login
+  followed from the http:8080 entry point asks Google for redirect_uri=https://host:8080/callback,
+  a port that speaks no TLS. Same trap the seat map's error banner exists to avoid.
+
+  The chosen showtime is carried through as `next` so signing in lands the visitor back on the
+  booking they were starting, rather than on the home page having lost it.
+
+  WHICH LANGUAGE THIS RENDERS IN. It is served by POST /booking, which robots.txt disallows and
+  which therefore keeps its bare URL (LanguagePreference.path) — so the sheet follows the cookie
+  rather than the path the visitor is on. Known and accepted, the same consequence as for
+  a Response.seeOther built in Java.
+!}
+<div class="bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="auth-sheet-title">
+    <h2 id="auth-sheet-title">{msg:authSheetTitle}</h2>
+    <p>{msg:authSheetBody}</p>
+    <p><a class="primary" href="{inject:signIn.url}">{msg:authSheetSignIn}</a></p>
+    <p>
+        <button type="button" hx-get="/booking/sheet/dismiss" hx-target="#auth-sheet"
+                hx-swap="innerHTML">{msg:authSheetDismiss}</button>
+    </p>
+</div>

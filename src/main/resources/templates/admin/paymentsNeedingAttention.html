@@ -1,0 +1,85 @@
+{#include base}
+{#title}{msg:admPaymentsNeedingAttention} — {msg:navTenantAdmin}{/title}
+<p><a href="/admin">&larr; {msg:navTenantAdmin}</a></p>
+<h1>{msg:admPaymentsNeedingAttention}</h1>
+
+{! Both lists are money in an unresolved position that no scheduled job will resolve. Everything
+   else about a payment settles itself: a webhook confirms it, the reconciliation scan chases a
+   missed one, an unpaid QR expires. These two wait on a person, so they need somewhere to be
+   seen. !}
+<div class="card">
+    <p class="muted">{msg:admPaymentsIntro}</p>
+</div>
+
+<h2>{msg:admFraudReview}</h2>
+<div class="card">
+    {! .raw: "taken the money" and "their dashboard" are the two facts that decide what staff do
+       next, and unemphasised in a sentence this long they are missed. !}
+    <p>{msg:admFraudReviewWhat.raw}</p>
+    <p class="muted">{msg:admFraudReviewAction}</p>
+</div>
+<table>
+    <tr><th>{msg:admWaitingSince}</th><th>{msg:admOrder}</th><th>{msg:admAmount}</th><th>{msg:admBooking}</th></tr>
+    {#for payment in fraudReview}
+    <tr>
+        {! Waiting-since rather than a status word: the status is the same for every row here, and
+           the age is the only thing that distinguishes one worth chasing from one raised minutes
+           ago. It is the review's start, not our last query — the column is stamped once. !}
+        <td>{payment.fraudReviewAt.fmtDateTime}</td>
+        <td>{payment.qrisPartnerReferenceNo}</td>
+        <td>{payment.amount.fmtMoney}</td>
+        <td><a href="/orders/{payment.reservationGroupId}">{msg:admViewOrder}</a></td>
+    </tr>
+    {#else}
+    <tr><td colspan="4" class="muted">{msg:admNoFraudReview}</td></tr>
+    {/for}
+</table>
+
+<h2>{msg:admRefundsOwed}</h2>
+<div class="card">
+    {! .raw: paid is emphasised because the list is exactly the paid ones — an unpaid cancelled
+       booking owes nobody anything and never appears here. !}
+    <p>{msg:admRefundsWhat.raw}</p>
+    <p class="muted">{msg:admRefundsAction}</p>
+</div>
+<table>
+    <tr><th>{msg:admOwedSince}</th><th>{msg:admOrder}</th><th>{msg:admOwed}</th><th>{msg:admOf}</th><th>{msg:admReason}</th><th>{msg:admBooking}</th></tr>
+    {#for payment in refundsDue}
+    <tr>
+        <td>{payment.refundDueAt.fmtDateTime}</td>
+        <td>{payment.qrisPartnerReferenceNo}</td>
+        <td>{payment.refundDueAmount.fmtMoney}</td>
+        {! The original charge beside the debt, because a partial cancellation of a group is the
+           normal case and "owed 50.000" means something different against a 50.000 booking than
+           against a 200.000 one. !}
+        <td class="muted">{payment.amount.fmtMoney}</td>
+        {! Composed in Java when the cancellation was recorded, so still English on an Indonesian
+           page — the same group as the {error} banners. !}
+        <td class="muted">{payment.refundReason}</td>
+        <td><a href="/orders/{payment.reservationGroupId}">{msg:admViewOrder}</a></td>
+    </tr>
+    {#else}
+    <tr><td colspan="6" class="muted">{msg:admNothingOwed}</td></tr>
+    {/for}
+</table>
+
+{! a BI-SNAP '04' that cleared no debt of ours. The seats were left
+   alone on purpose; refundReason here is the stored flag, English for the reason above. !}
+<h2>{msg:admGatewayRefunds}</h2>
+<div class="card"><p>{msg:admGatewayRefundsWhat}</p><p class="muted">{msg:admGatewayRefundsResolveNote}</p></div>
+<table>
+    <tr><th>{msg:admOrder}</th><th>{msg:admOf}</th><th>{msg:admOwed}</th><th>{msg:admReason}</th><th>{msg:admBooking}</th><th></th></tr>
+    {#for payment in gatewayRefunds}
+    <tr>
+        <td>{payment.qrisPartnerReferenceNo}</td>
+        <td>{payment.amount.fmtMoney}</td>
+        <td class="muted">{payment.refundDueAmount.fmtMoney}</td>
+        <td class="muted">{payment.refundReason}</td>
+        <td><a href="/orders/{payment.reservationGroupId}">{msg:admViewOrder}</a></td>
+        <td><form method="post" action="/admin/payments/{payment.paymentId}/gateway-refund-resolved"><button type="submit">{msg:admMarkResolved}</button></form></td>
+    </tr>
+    {#else}
+    <tr><td colspan="6" class="muted">{msg:admNoGatewayRefunds}</td></tr>
+    {/for}
+</table>
+{/include}

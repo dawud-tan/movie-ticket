@@ -1,0 +1,59 @@
+{! The account page. Everything on it came from the Google sign-in EXCEPT the date
+   of birth, which nothing else can fill: the customer.date_of_birth column records that Google sends no birthdate for the
+   scopes this application asks for, so the field below is the only way that column is ever
+   populated on this deployment. It feeds the seat map's age advisory, which warns and never
+   refuses — a customer who wants their name changed is still better told where to change it than
+   given a field here that the next sign-in would overwrite.
+
+   Links out of here stay bare: /profile and /orders are behind @RolesAllowed and robots.txt
+   disallows both by prefix, so the cookie is what keeps this page in the reader's language.
+
+   ONE ENGLISH STRING CAN STILL REACH THIS PAGE: errorMessage below, from ProfileResource, which
+   is Java copy rather than template copy, one of the strings a bundle has not been wired into
+   yet. !}
+{#include base}
+{#title}{msg:profileTitle}{/title}
+<p><a href="/orders">&larr; {msg:navYourOrders}</a></p>
+<h1>{msg:profileTitle}</h1>
+
+{#if errorMessage}
+<p class="error-banner" role="alert">{errorMessage}</p>
+{/if}
+
+<div class="card">
+    <p><span class="muted">{msg:profileName}</span><br><strong>{profile.name}</strong></p>
+    {#if profile.email}
+    <p><span class="muted">{msg:profileEmail}</span><br>{profile.email}</p>
+    {/if}
+
+    {#if profile.hasAge}
+    <p><span class="muted">{msg:profileAge}</span><br>{profile.age}</p>
+    {#else}
+    {! Said plainly rather than left blank or filled with a guess. The age attestation's boolean is
+       NOT an age: it records that somebody ticked "I am old enough", which cannot tell 13+ from
+       21+, so it is reported below as the separate thing it is. !}
+    <p><span class="muted">{msg:profileAge}</span><br>
+        <span class="muted">{msg:profileAgeUnknown}</span></p>
+    {/if}
+
+    {#if profile.ageAttested}
+    <p class="muted">{msg:profileAgeAttested}</p>
+    {/if}
+</div>
+
+{! The one editable field on this page. A plain form POST with a redirect after it
+   (ProfileResource says why), not an htmx swap: this is a whole-page edit rather than one of the
+   seat map's fragment exchanges. !}
+<div class="card">
+    <form method="post" action="/profile">
+        <label for="dateOfBirth">{msg:profileDateOfBirth}</label>
+        <input type="date" id="dateOfBirth" name="dateOfBirth"
+               value="{#if profile.hasAge}{profile.dateOfBirth}{/if}">
+        <p class="muted">{msg:profileDateOfBirthHint}</p>
+        <button type="submit">{msg:save}</button>
+    </form>
+</div>
+
+<p class="muted">{msg:profileGoogleNote}</p>
+<p><a class="button" href="/logout">{msg:signOut}</a></p>
+{/include}

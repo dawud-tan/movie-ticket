@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FCM push pipeline test</title>
+</head>
+<body>
+<h1>FCM push pipeline test</h1>
+<div>Status: <span id="status">not subscribed</span></div>
+<div>FID (last 8 chars): <span id="tokenSuffix">-</span></div>
+<div>Watch ID: <span id="watchId">-</span></div>
+<h2>Received (from onMessage, foreground)</h2>
+<pre id="received">(nothing yet)</pre>
+
+<script type="module" src="/js/push-test.js{asset:v('js/push-test.js')}"></script>
+</body>
+</html>

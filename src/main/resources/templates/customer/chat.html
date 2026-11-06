@@ -1,0 +1,26 @@
+{! The booking assistant. Behind sign-in, so robots.txt
+   disallows /chat and no link here takes the /id prefix; the cookie keeps the language, as on
+   /orders. The privacy notice comes BEFORE the text input on purpose: the reader learns where the text
+   goes before typing it. Each answer is the model's text, escaped and then lightly formatted
+   (chatTurn.html, ChatMarkup), never .raw. !}
+{#include base}
+{#title}{msg:chatTitle}{/title}
+<h1>{msg:chatTitle}</h1>
+<p>{msg:chatIntro}</p>
+<p class="card" role="note"><strong>{msg:chatPrivacy(host)}</strong> {msg:chatDailyCap(dailyCap)}</p>
+
+<div id="chat-log" aria-live="polite"></div>
+
+{! A seat proposal waits out the model host's per-minute limit, which on the free tier is a minute
+   or two (application.properties, max-retries): without this the page looks stuck, and the button
+   stays live for a second send that would only queue behind the first. !}
+<p id="chat-wait" role="status" hidden>{msg:chatWaiting}</p>
+{! chat.js shows #chat-wait and resets the form; no hx-on, which needs 'unsafe-eval' under the CSP. !}
+<form id="chat-form" hx-post="/chat" hx-target="#chat-log" hx-swap="beforeend" hx-disabled-elt="find button">
+  <input type="hidden" name="thread" value="{thread}">
+  <label for="chat-message">{msg:chatMessageLabel}</label>
+  <textarea id="chat-message" name="message" rows="3" maxlength="500" required></textarea>
+  <button type="submit">{msg:chatSend}</button>
+</form>
+<script src="/js/chat.js{asset:v('js/chat.js')}"></script>
+{/include}

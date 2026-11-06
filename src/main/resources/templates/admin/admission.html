@@ -1,0 +1,11 @@
+{#include base}
+{#title}{showing.label} — {msg:admAdmission}{/title}
+<p><a href="/admin/showings/{showing.resourcePoolSessionId}/reservations">&larr; {msg:admReservationsForShowing}</a></p>
+<h1>{msg:admDoor} &mdash; {showing.label}</h1>
+<p class="muted">{hall.name} &middot; {showing.startsAt.fmtDateTime}</p>
+
+{! Everything a scan replaces lives in the panel, so the page and the htmx response render the
+   same markup from one source — the same split as reservation.html / reservationFragment.html
+   and seatmap.html / seatmapFragment.html. !}
+{#include admin/admissionPanel showing=showing result=result /}
+{/include}

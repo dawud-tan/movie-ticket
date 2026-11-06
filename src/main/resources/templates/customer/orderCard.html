@@ -1,0 +1,38 @@
+{! One order, in both sections of the orders page. Included rather than written twice, because
+   the two lists differ only in which rows they hold — a second copy of this card is a second
+   place for the booking code, the seat count and the money to drift apart. !}
+<div class="card">
+    {! The code is the first thing on the card, because it is the thing a customer is asked for.
+       "I am calling about K7M2QPRT" is the whole point of a booking code — and it is safe in
+       a list like this precisely because it grants nothing: the entry credential is the barcode
+       on the detail page, per seat. !}
+    <p class="ticket-code">{booking.bookingCode}</p>
+    {#if booking.hasShowing}
+    <h3>{booking.hallName} &mdash; {booking.showingLabel}</h3>
+    <p class="muted">{booking.showingStartsAt.fmtDateTime}</p>
+    {#else}
+    {! A failed group has no reservation rows at all, so there is no showing to name — a hold rolls
+       the whole group back when one seat is taken first. It is still listed, and deliberately:
+       this is the booking a customer is most likely to come here to ask about. !}
+    <h3>{booking.hallName}</h3>
+    <p class="muted">{msg:orderBooked(booking.createdAt.fmtDateTime)}</p>
+    {/if}
+    <p>
+        {! The class keeps the raw status the database wrote, because the stylesheet selects on
+           it; only the label is translated. See StatusLabels. !}
+        <span class="badge {booking.status}">{inject:status.of(booking.status)}</span>
+        {#if booking.seatCount > 0}
+        <span class="muted">{msg:orderSeatCount(booking.seatCount)}
+            &middot; {booking.totalAmount.fmtMoney}</span>
+        {#else}
+        <span class="muted">{msg:orderNoSeats}</span>
+        {/if}
+    </p>
+    {! Stated rather than implied by the badge: "confirmed" and "paid" are different facts, and a
+       counter sale settled in cash is confirmed with nothing in the payment table. A customer
+       checking whether their transfer went through is looking for exactly this line. !}
+    {#if booking.isPaid}
+    <p class="muted">{msg:orderPaidAt(booking.paidAt.fmtDateTime)}</p>
+    {/if}
+    <a class="button" href="/orders/{booking.reservationGroupId}">{msg:orderView}</a>
+</div>

@@ -1,0 +1,173 @@
+<!doctype html>
+{! The page's own language, from LanguagePreference: the /id prefix if the URL carried one,
+   else the booking_lang cookie, else Accept-Language, else English. Not a constant any more —
+   a wrong lang= is what makes a screen reader read Indonesian with English phonemes and makes
+   a browser offer to translate a page into the language it is already in. !}
+<html lang="{inject:lang.tag}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{#insert title}Demo Cinema{/insert}</title>
+    <link rel="stylesheet" href="/css/app.css{asset:v('css/app.css')}">
+    {! No template uses htmx indicators, and the <style> htmx would insert for them is refused by
+       the CSP's style-src 'self' (CanonicalAuthorityFilter). !}
+    <meta name="htmx-config" content='{"includeIndicatorStyles":false}'>
+    <script src="/js/htmx.min.js{asset:v('js/htmx.min.js')}"></script>
+    {! Lets a page contribute its own head markup — resource hints today, and the prerequisite for
+       the og:/canonical/JSON-LD markup. Empty by default: a hint belongs only on
+       the page that benefits, never on every response.
+       Deliberately below app.css and htmx.min.js. Those two sit in the first ~300 bytes so the
+       preload scanner dispatches them off the raw byte stream before the parser builds a node,
+       and nothing inserted here should be able to push them later. !}
+    {#insert head}{/insert}
+</head>
+<body>
+<header class="site">
+    {! Public links go through lang.path so that following one from inside the Indonesian
+       site stays inside it. The authenticated links below deliberately do not — see
+       LanguagePreference.path. !}
+    <a href="{inject:lang.path('/')}">Demo Cinema</a>
+    <nav>
+        {! The two menus, in the order the market puts them: a visitor either knows
+           the cinema or knows the film. Both land on the same showtime. !}
+        <a href="{inject:lang.path('/cinemas')}">{msg:navCinemas}</a>
+        <a href="{inject:lang.path('/movies')}">{msg:navNowPlaying}</a>
+        {! The order history. Shown to a signed-in customer only: staff have no
+           bookings of their own, and an anonymous visitor has nothing to list. Same rule as every
+           other conditional here — UX, not the boundary. The endpoint is @RolesAllowed either way. !}
+        {#if inject:actor.isCustomer}<a href="/orders">{msg:navYourOrders}</a>{/if}
+        {! The booking assistant: only once it is configured and only to a signed-in caller who
+           may use it. UX, not the boundary — ChatResource is @RolesAllowed and 404s while unset. !}
+        {#if inject:assistantNav.visible}<a href="/chat">{msg:navAssistant}</a>{/if}
+        {!
+          The first authorization rule, restated where it is most tempting to forget: this conditional is UX,
+          NOT the security boundary. Hiding the link stops a customer stumbling into a page
+          they cannot use; it does nothing whatsoever to stop them typing /admin directly.
+          What actually stops that is @RolesAllowed(Roles.TENANT_STAFF) on HallAdminResource
+          and ReservationAdminResource, enforced by the container per endpoint, and covered by
+          AdminAuthorizationTest which asserts a customer-role identity gets 403 from the URL
+          rather than merely not seeing this anchor.
+        !}
+        {#if inject:actor.isStaff}<a href="/admin">{msg:navTenantAdmin}</a>{/if}
+        {! Staff management, and the paragraph above applies unchanged: shown to a manager only, but what
+           actually stops anyone else is @RolesAllowed(Roles.STAFF_MANAGER) on
+           StaffAdminResource — the one endpoint in the tree that asks for more than
+           tenant_staff. StaffAdminTest asserts a plain staff identity gets 403 from the URL
+           rather than merely not seeing this anchor.
+
+           staffNav rather than one more method on `actor`, which would read better and does
+           not work: a NEW method on CurrentActor called from a template renders every page
+           500 (the client proxy runs it uninjected). StaffNav's javadoc has the measurement. !}
+        {#if inject:staffNav.visible}<a href="/admin/staff">{msg:navStaff}</a>{/if}
+        {#if inject:actor.isPlatformAdmin}<a href="/platform/tenants">{msg:navPlatform}</a>{/if}
+    </nav>
+
+    {!
+      The city select, top right, on every public page.
+
+      A form POST rather than a link per city, because choosing a city writes a cookie and a GET
+      must not — see CityResource. `next` carries the visitor back to the page they were on, and
+      is re-confined server-side: it has been through a form field by then, so whatever this
+      template put in it is not what the server may trust.
+
+      The submit button is not decoration and must stay: city-select.js submits on change as an
+      enhancement, and without the button a visitor with no JavaScript could pick a city and have
+      no way to apply it.
+
+      Rendered only when there is a genuine choice (hasChoice), keeping the rule that a
+      one-cinema operator is never walked through a city step.
+    !}
+    {#if inject:city.hasChoice}
+    <form class="city-select" method="post" action="/city">
+        <input type="hidden" name="next" value="{inject:city.currentPath}">
+        <label for="city-field">{msg:cityLabel}</label>
+        <select id="city-field" name="city">
+            {#for option in inject:city.options}
+            <option value="{option.city}" {#if option.city == inject:city.selected}selected{/if}>
+                {option.city} ({option.branchCount})
+            </option>
+            {/for}
+        </select>
+        <button type="submit">{msg:cityGo}</button>
+        {! Only offered when some city actually has coordinates — the site table left latitude/longitude
+           nullable and null, so on a tenant that never filled them in this button could do
+           nothing but apologise. The script reads this attribute and stays quiet without it. !}
+        {#if inject:city.isLocatable}
+        <button type="button" id="city-locate" data-locate="true">{msg:cityUseMyLocation}</button>
+        {/if}
+        <span id="city-locate-status" class="muted" role="status" aria-live="polite"></span>
+    </form>
+    {/if}
+
+    {!
+      The language switch. A POST for exactly the reason the city form above is
+      one — writing a cookie on a GET would make a shared link change what the next twelve
+      pages show — and the endpoint also redirects to the prefixed spelling of this page, so
+      the visitor lands on a URL that says what language it is in. LanguageResource has both.
+
+      A single button rather than a select and a Go: there are two languages, so the choice is
+      a toggle, and half the controls fit a header that already wraps to three rows on a phone.
+      It names the language you would move TO, written in that language — the person who needs
+      this control is the person who cannot read the page they are on. A third language turns
+      this into a select and changes nothing on the server.
+
+      Always visible and never a drawer. The city select carries a submit button precisely so a
+      visitor with no JavaScript can use it; a language control that only exists once a script
+      has opened it would be the one piece of chrome here that breaks that rule. Placed before
+      the session block and given no `order` in app.css's 40rem block so that on a phone it
+      rides in the first row with the brand and the sign-in link, rather than claiming a fourth
+      full-width row under the city select.
+
+      No flag emoji — Language.java's javadoc has the three reasons, the cheapest of which is
+      that Windows ships no flag glyphs and renders one as the bare letters "ID".
+
+      lang= on the button is not decoration: without it a screen reader reads "Bahasa Indonesia"
+      with English phonemes.
+    !}
+    <form class="lang-switch" method="post" action="/language">
+        <input type="hidden" name="next" value="{inject:lang.currentPath}">
+        <button type="submit" name="lang" value="{inject:lang.otherTag}"
+                class="button-secondary" lang="{inject:lang.otherTag}"
+                title="{inject:lang.switchLabel}"
+                aria-label="{inject:lang.switchLabel}">{inject:lang.otherEndonym}</button>
+    </form>
+
+    <span class="session">
+        {#if inject:actor.isAuthenticated}
+            {#if inject:actor.isCustomer}<a href="/profile">{inject:actor.displayName}</a>
+            {#else}<span class="muted">{inject:actor.displayName}</span>{/if}
+            <a href="/logout">{msg:signOut}</a>
+        {#else}
+            {! Absolute onto the https origin when configured — see SignInLink: Google requires an
+                https redirect_uri, and forcing only the scheme on an http:8080 visit yields
+                https://host:8080/callback, a port that speaks no TLS. !}
+            <a href="{inject:signIn.url}">{msg:signIn}</a>
+        {/if}
+    </span>
+</header>
+<main>
+    {#insert /}
+    {! The complaint phone, before any transaction (PP 71/2019 Pasal 37(1)), so on every page and
+       not only the order page. The admin pages show it too: it is for the buyer, not a field the
+       counter needs. A plain link, not a .raw message: the number is tenant data, so it stays
+       escaped. !}
+    <footer class="muted">{msg:complaintPhoneLabel} <a href="tel:{inject:complaint.tel}">{inject:complaint.phone}</a>{#if inject:complaint.pseRegistrationNo} · {msg:pseRegistrationLabel} {inject:complaint.pseRegistrationNo}{/if}</footer>
+</main>
+
+{!
+  Where the sign-in sheet lands when an anonymous visitor taps a showtime.
+
+  Empty on every page and present on every page, because the showtime buttons are rendered by an
+  htmx fragment that has no way to create a target outside itself — hx-target must name something
+  already in the document. Costs one empty div; the alternative is each fragment carrying its own
+  sheet, which would put several of them in the DOM at once on a page listing four films.
+!}
+<div id="auth-sheet"></div>
+
+{! Deliberately not deferred and deliberately last: it is small and local, it only wires two
+   listeners, and nothing on the page waits for it. Loaded on every page because the city select
+   is in the header of every page. !}
+<script src="/js/city-select.js{asset:v('js/city-select.js')}"></script>
+</body>
+</html>

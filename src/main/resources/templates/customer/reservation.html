@@ -1,0 +1,11 @@
+{#include base}
+{#title}{msg:reservationTitle}{/title}
+<p><a href="{inject:lang.path('/')}">&larr; {msg:showtimes}</a></p>
+<h1>{detail.hall.name} &mdash; {detail.showing.label}</h1>
+<p class="muted">{detail.showing.startsAt.fmtDateTime}</p>
+
+{! Everything that settlement changes lives in the fragment, so the page and the poll render the
+   same markup from one source. Same split as seatmap.html / seatmapFragment.html. !}
+{#include customer/reservationFragment detail=detail payment=payment paymentEnabled=paymentEnabled walletLinks=walletLinks /}
+{#if inject:actor.isCustomer}<script type="module" src="/js/order-push.js{asset:v('js/order-push.js')}"></script>{/if}
+{/include}

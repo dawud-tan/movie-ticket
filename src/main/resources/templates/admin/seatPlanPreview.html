@@ -1,0 +1,64 @@
+{#include base}
+{#title}{msg:admSeatPlanPreview} — {hall.name}{/title}
+<p><a href="/admin/halls/{hall.resourcePoolId}">&larr; {hall.name}</a></p>
+<h1>{msg:admSeatPlanPreview}</h1>
+
+{! {error} is still English — it is whatever the plan parser threw, and those are a separate
+   pass. The sentences around it are not. !}
+{#if error}
+<div class="card">
+    <h2>{msg:admPlanRefused}</h2>
+    <p class="danger">{error}</p>
+    <p class="muted">{msg:admPlanRefusedNote}</p>
+    <p><a href="/admin/halls/{hall.resourcePoolId}">{msg:admBackToHall(hall.name)}</a></p>
+</div>
+{#else}
+<div class="card">
+    {#if sourceName}
+    <h2>{msg:admPreviewClone(sourceName,hall.name)}</h2>
+    {#else if csv}
+    <h2>{msg:admPreviewImport(preview.seatCount,preview.rowCount,hall.name)}</h2>
+    {#else}
+    <h2>{msg:admPreviewCreate(preview.seatCount,preview.rowCount)}</h2>
+    {/if}
+
+    {! What the file did NOT bring across. A dropped column and a line belonging to another
+       studio are the two ways an import looks like it worked and did not, so they are said
+       here, before anything is written, rather than left to be noticed as missing seats.
+       Composed in Java, so still English — the same group as {error} above. !}
+    {#if preview.note}
+    <p class="muted">{preview.note}</p>
+    {/if}
+
+    {#if preview.hasConflicts}
+    <p class="danger">
+        {msg:admPreviewConflicts}
+        {#for label in preview.conflicts}{label} {/for}
+    </p>
+    <p class="muted">{msg:admPreviewConflictsNote}</p>
+    {#else}
+    <p>{msg:admPreviewSummary(preview.seatCount,preview.rowCount)}</p>
+    {/if}
+
+    <table>
+        <tr><th>{msg:admLabel}</th><th>{msg:admRow}</th><th>{msg:admSequence}</th></tr>
+        {#for seat in preview.seats}
+        <tr><td>{seat.label}</td><td>{seat.groupKey}</td><td>{seat.sequenceNo}</td></tr>
+        {/for}
+    </table>
+
+    {#if !preview.hasConflicts}
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/apply">
+        {#if sourcePoolId}<input type="hidden" name="sourcePoolId" value="{sourcePoolId}">{/if}
+        {#if spec}<input type="hidden" name="spec" value="{spec}">{/if}
+        {! The file travels back with the confirmation instead of being uploaded a second time:
+           one file chooser, two steps. A textarea rather than a hidden input because the value
+           has newlines in it, which is exactly what a hidden input is worst at carrying. !}
+        {#if csv}<textarea name="csv" hidden>{csv}</textarea>{/if}
+        <p><button type="submit">{msg:admPreviewApply(preview.seatCount)}</button></p>
+    </form>
+    {/if}
+    <p><a href="/admin/halls/{hall.resourcePoolId}">{msg:admCancel}</a></p>
+</div>
+{/if}
+{/include}

@@ -1,0 +1,14 @@
+{#include base}
+{#title}{msg:citiesTitle(city)}{/title}
+{#head}{#include seoHead /}{/head}
+<p><a href="{inject:lang.path('/')}">&larr; {msg:backHome}</a></p>
+<h1>{msg:citiesTitle(city)}</h1>
+{#for site in sites}
+<div class="card">
+    <h2><a href="{inject:lang.path('/cinemas/')}{site.slug}">{site.name}</a></h2>
+    {#if site.address}<p class="muted">{site.address}</p>{/if}
+</div>
+{#else}
+<p class="muted">{msg:citiesEmpty(city)}</p>
+{/for}
+{/include}

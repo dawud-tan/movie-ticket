@@ -1,0 +1,79 @@
+# Eclipse
+.project
+.classpath
+.settings/
+bin/
+
+# IntelliJ
+.idea
+*.ipr
+*.iml
+*.iws
+
+# NetBeans
+nb-configuration.xml
+
+# Visual Studio Code
+.vscode
+
+# OSX
+.DS_Store
+
+# Vim
+*.swp
+*.swo
+
+# patch
+*.orig
+*.rej
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+
+*.log*
+
+# nodejs
+node_modules/
+
+# Key material and credentials. Nothing here belongs in git: on Cloud Run every secret arrives
+# from Secret Manager at deploy time (`--set-secrets`, deploy/cloudrun/README.md), so a key file
+# in this tree is always either a mistake or a local experiment. These patterns exist so one
+# dropped in the working directory by accident cannot be committed — before them, this file had
+# no secret patterns at all.
+#
+# *service-account*.json earns its place even though that README argues you should never need
+# one: GOOGLE_APPLICATION_CREDENTIALS is a PATH, so the escape hatch for pinning a specific
+# identity is a mounted key file — and that is precisely the file someone copies into a checkout
+# "just to test push locally".
+#
+# !deploy/**/*.env.example matches nothing today; it is here so that an example file added
+# later stays committable rather than being silently swallowed by *.env.
+*.pem
+*.p8
+*.p12
+*.jks
+*.key
+*-private-key*
+*service-account*.json
+.env
+*.env
+!deploy/**/*.env.example
+
+# Claude Code local state. Neither of these is project content.
+#
+# settings.local.json is per-machine permission grants that every session appends to. It was
+# tracked until 2026-08-20, which meant each session's grants landed in the branch history as
+# diff noise and every worktree raced the same file. `git rm --cached` untracked it; the file
+# stays on disk and keeps working. Anything meant to be SHARED goes in .claude/settings.json,
+# which is still tracked deliberately.
+#
+# worktrees/ holds agent worktrees checked out inside the repo. Each carries a .git FILE, not a
+# .git directory, so git sees ordinary files rather than a nested repo it would skip — while
+# untracked and unignored, a stray `git add -A` would have committed ~1.4 GB of duplicated
+# source and build output.
+.claude/settings.local.json
+.claude/worktrees/

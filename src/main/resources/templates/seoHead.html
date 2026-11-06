@@ -1,0 +1,33 @@
+{! The head markup a public page contributes, in one place rather than repeated seven times.
+   Included from inside each page's {#head} block — see base.html's {#insert head}.
+
+   Every line is conditional on purpose. With no configured public origin (local development,
+   and the whole test suite) `meta.canonicalUrl` is null and the page emits no canonical and
+   no og:url — which is the honest thing to say when the deployment does not know its own
+   address, and better than pointing a crawler at localhost.
+
+   The JSON-LD is rendered with .raw, and that is safe ONLY because SeoMarkup built it: the
+   string has already been through Jackson and then had <, > and & rewritten to their \u00XX
+   forms, so no film title an operator types can close this script element. Do not put a
+   template expression of your own inside the script block — Qute HTML-escapes it, which emits
+   &#39; into raw-text content and breaks the JSON, and reaching for .raw to fix that is the
+   script-injection hole JsonLd exists to close. Add the value to SeoMarkup instead. !}
+{#if meta.canonicalUrl}<link rel="canonical" href="{meta.canonicalUrl}">
+<meta property="og:url" content="{meta.canonicalUrl}">{/if}
+{! One <link> per language this page exists in, plus x-default, and the set includes THIS page:
+   a self-referential hreflang is a requirement rather than a nicety — search engines discard a
+   set that omits the page carrying it. PublicUrls.alternates builds all of them together so
+   that cannot be got wrong here.
+
+   Empty for a page that was not given a set: an untranslated one — claiming an Indonesian URL
+   for a page that serves English copy is worse than claiming nothing — and /cinemas, which
+   cannot have a self-referential set because it canonicalises to the city page instead. Every other
+   customer-facing page now carries one. See PageMeta's javadoc. !}
+{#for alternate in meta.alternates}<link rel="alternate" hreflang="{alternate.hreflang}" href="{alternate.href}">
+{/for}
+{#if meta.title}<meta property="og:title" content="{meta.title}">{/if}
+{#if meta.description}<meta property="og:description" content="{meta.description}">{/if}
+{#if meta.imageUrl}<meta property="og:image" content="{meta.imageUrl}">
+<meta name="twitter:card" content="summary_large_image">{/if}
+{#if meta.type}<meta property="og:type" content="{meta.type}">{/if}
+{#if meta.jsonLd}<script type="application/ld+json">{meta.jsonLd.raw}</script>{/if}

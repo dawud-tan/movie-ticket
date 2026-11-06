@@ -1,0 +1,21 @@
+{#include base}
+{! The heading and the <title> reuse the header nav's key rather than getting one of their own,
+   for home.html's reason: the menu and the page it opens are the same two words, and a second
+   key is how the two end up saying different things in Indonesian while still agreeing in
+   English. !}
+{#title}{msg:navNowPlaying}{/title}
+{#head}{#include seoHead /}{/head}
+<h1>{msg:navNowPlaying}</h1>
+{#for film in films}
+<div class="card">
+    {#if film.posterUrl}<img src="{film.posterUrl}" alt="{msg:filmPosterAlt(film.title)}" width="120">{/if}
+    <h2><a href="{inject:lang.path('/movies/')}{film.slug}">{film.title}</a></h2>
+    <p class="muted">
+        {#if film.classification}<span class="badge">{film.classification}</span>{/if}
+        {#if film.durationMinutes}{msg:filmDuration(film.durationMinutes)}{/if}
+    </p>
+</div>
+{#else}
+<p class="muted">{msg:moviesEmpty}</p>
+{/for}
+{/include}
