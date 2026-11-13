@@ -1,0 +1,40 @@
+{!
+  One showtime per button, and pressing one starts a booking.
+
+  WHY EACH IS A FORM POST AND NOT A LINK. Opening a booking creates a booking_draft row, so it is
+  a write and must not be a GET — a crawler walking this page would otherwise mint a draft per
+  showtime, and a prefetching browser would do it before the customer had decided anything. A form
+  rather than hx-vals so the same markup still works with no JavaScript at all: the plain submit
+  posts the same field and the server answers 303 instead of HX-Redirect.
+
+  WHY hx-target IS #auth-sheet AND NOT SELF. The endpoint answers one of two ways: a redirect onto
+  /booking?booking_ref=..., which htmx follows and never swaps; or the sign-in sheet for an
+  anonymous visitor, which lands in the empty container base.html keeps at the bottom of every
+  page. Targeting this strip instead would replace the showtimes with the sheet, losing the choice
+  the visitor just made.
+
+  Both answers are HTTP 200. That is deliberate, not sloppy status
+  codes: htmx does not swap a non-2xx response, so answering 401 to the anonymous case would make
+  the button do nothing at all — the exact dead-button failure that section records having paid
+  for once already.
+
+  WHY /booking STAYS BARE while the hx-get that fetched this strip carries /id. robots.txt
+  disallows /booking by that exact prefix, and /id/booking would be a second spelling that list
+  does not cover — LanguagePreference.path's rule. The consequence is the one already accepted
+  for a Response.seeOther: the sign-in sheet follows the cookie rather than the path, so a
+  cookie-less visitor who arrived on /id sees it in English.
+!}
+<div class="showtimes">
+{#for showing in showings}
+    <form method="post" action="/booking" class="showtime-form"
+          hx-post="/booking" hx-target="#auth-sheet" hx-swap="innerHTML">
+        <input type="hidden" name="sessionId" value="{showing.resourcePoolSessionId}">
+        <button type="submit" class="showtime {showing.status}">
+            {showing.startsAt.fmtTime}
+            <span class="muted">{showing.hallName}</span>
+        </button>
+    </form>
+{#else}
+    <p class="muted">{msg:showtimesFragmentEmpty}</p>
+{/for}
+</div>

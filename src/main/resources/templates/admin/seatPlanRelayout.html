@@ -1,0 +1,84 @@
+{#include base}
+{#title}{msg:admRelayout} — {hall.name}{/title}
+<p><a href="/admin/halls/{hall.resourcePoolId}">&larr; {hall.name}</a></p>
+<h1>{msg:admRelayoutHeading(hall.name)}</h1>
+
+{! {error} and {note} are both composed in Java and are still English, a separate pass.
+   Everything the template itself says is not. !}
+{#if error}
+<div class="card">
+    <h2>{msg:admRelayoutRefused}</h2>
+    <p class="danger">{error}</p>
+    <p class="muted">{msg:admRelayoutRefusedNote}</p>
+    <p><a href="/admin/halls/{hall.resourcePoolId}">{msg:admBackToHall(hall.name)}</a></p>
+</div>
+{#else}
+<div class="card">
+    {#if sourceName}
+    <h2>{msg:admRelayoutClone(hall.name,sourceName)}</h2>
+    {#else}
+    <h2>{msg:admRelayoutCount(hall.name,relayout.diff.seatCountAfterwards)}</h2>
+    {/if}
+
+    {#if note}<p class="muted">{note}</p>{/if}
+
+    {#if relayout.isBlocked}
+    {! The one refusal this feature exists to make. Retiring a seat somebody is sitting in --
+       or has paid to sit in -- is a decision with a customer on the other end of it, so it is
+       staff work, not a database operation. !}
+    <p class="danger">{msg:admRelayoutBlocked}
+        {#for label in relayout.blocked}{label} {/for}</p>
+    <p class="muted">{msg:admRelayoutBlockedNote}</p>
+    {#else if relayout.diff.changesNothing}
+    <p>{msg:admRelayoutNoop}</p>
+    {/if}
+
+    <table>
+        <tr><th>{msg:admRelayoutWhatHappens}</th><th>{msg:admSeats}</th></tr>
+        <tr><td>{msg:admRelayoutUnchanged}</td><td>{relayout.diff.unchanged.size}</td></tr>
+        <tr><td>{msg:admRelayoutMoving}</td><td>{relayout.diff.moving.size}</td></tr>
+        <tr><td>{msg:admRelayoutRemarking}</td><td>{relayout.diff.remarking.size}</td></tr>
+        <tr><td>{msg:admRelayoutReinstating}</td><td>{relayout.diff.reinstating.size}</td></tr>
+        <tr><td>{msg:admRelayoutCreating}</td><td>{relayout.diff.creating.size}</td></tr>
+        <tr><td>{msg:admRelayoutRetiring}</td><td>{relayout.diff.retiring.size}</td></tr>
+    </table>
+
+    {#if relayout.diff.retiring}
+    <h3>{msg:admRelayoutRetiredHeading}</h3>
+    {! .raw: <strong>not</strong> deleted is the whole reassurance, and an unemphasised "not" in
+       a sentence this long is the one word a worried reader skips. !}
+    <p class="muted">{msg:admRelayoutRetiredNote.raw}</p>
+    <p>{#for seat in relayout.diff.retiring}{seat.label} {/for}</p>
+    {/if}
+
+    {#if relayout.diff.creating}
+    <h3>{msg:admRelayoutCreatedHeading}</h3>
+    <p>{#for seat in relayout.diff.creating}{seat.label} {/for}</p>
+    {/if}
+
+    {#if relayout.diff.reinstating}
+    <h3>{msg:admRelayoutReinstatedHeading}</h3>
+    <p class="muted">{msg:admRelayoutReinstatedNote}</p>
+    <p>{#for change in relayout.diff.reinstating}{change.seat.label} {/for}</p>
+    {/if}
+
+    {#if relayout.diff.moving}
+    <h3>{msg:admRelayoutMovedHeading}</h3>
+    <p class="muted">{msg:admRelayoutMovedNote}</p>
+    <p>{#for change in relayout.diff.moving}{change.seat.label} &rarr; {change.to.groupKey}
+        {change.to.sequenceNo}{#if change_hasNext}, {/if}{/for}</p>
+    {/if}
+
+    {#if !relayout.isBlocked && !relayout.diff.changesNothing}
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/apply">
+        <input type="hidden" name="replace" value="on">
+        {#if sourcePoolId}<input type="hidden" name="sourcePoolId" value="{sourcePoolId}">{/if}
+        {#if spec}<input type="hidden" name="spec" value="{spec}">{/if}
+        {#if csv}<textarea name="csv" hidden>{csv}</textarea>{/if}
+        <p><button type="submit">{msg:admRelayoutApply}</button></p>
+    </form>
+    {/if}
+    <p><a href="/admin/halls/{hall.resourcePoolId}">{msg:admCancel}</a></p>
+</div>
+{/if}
+{/include}

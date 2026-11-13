@@ -1,0 +1,96 @@
+{#include base}
+{#title}{page.title} — {msg:chooseSeats}{/title}
+
+{!
+  The booking page. It states, in this order, what a customer at the counter would be asked
+  to confirm out loud: when, what, where, and which studio. The date and time are FIELDS rather
+  than text — changing either keeps the same booking_ref, which is the whole reason the draft
+  exists (see BookingDraft).
+!}
+<p><a href="{#if page.site}{inject:lang.path('/cinemas/')}{page.site.slug}{#else}{inject:lang.path('/movies')}{/if}">&larr; {msg:back}</a></p>
+<h1>{page.title}</h1>
+
+<div class="card booking-summary">
+    <p>
+        <strong>{page.theatreName}</strong>
+        <span class="badge">{page.studioNumber}</span>
+    </p>
+
+    {#if page.canChangeShowtime}
+    {!
+      Two forms, not one: each field re-renders the page on its own, and a customer who changes
+      the date has not yet chosen a time on it. The server picks the earliest showtime on the
+      newly-chosen date, which is what the time field then shows as selected.
+
+      POST-then-redirect, not a GET with the showtime in the query string. Moving the draft is a
+      write, and a write behind a GET is one prefetch or one crawler away from changing a
+      customer's booking without them touching anything. The redirect lands back on
+      /booking?booking_ref=... — the one URL this booking ever has, which is what makes the back
+      button and a reload both do the obvious thing.
+
+      The submit buttons are not decoration. booking-fields.js submits on change as an
+      enhancement; without them a visitor with no JavaScript could pick a date and never apply it.
+    !}
+    <form method="post" action="/booking/{page.draft.bookingRef}/date" class="booking-field">
+        <label for="booking-date">{msg:bookingDate}</label>
+        <select id="booking-date" name="date">
+            {#for day in page.dates}
+            <option value="{day.value}" {#if day.selected}selected{/if}>{day.label}</option>
+            {/for}
+        </select>
+        <button type="submit">{msg:bookingChangeDate}</button>
+    </form>
+
+    <form method="post" action="/booking/{page.draft.bookingRef}/showtime" class="booking-field">
+        <label for="booking-time">{msg:bookingTime}</label>
+        <select id="booking-time" name="showtime">
+            {#for time in page.timesOnSelectedDate}
+            <option value="{time.sessionId}" {#if time.selected}selected{/if}>
+                {time.label} — {time.hallName}
+            </option>
+            {/for}
+        </select>
+        <button type="submit">{msg:bookingChangeTime}</button>
+    </form>
+    {#else}
+    {! A label-only session (the schema keeps those first-class) or a hall with no branch has no
+       comparable schedule to offer, so the same two facts are stated rather than offered. !}
+    <p class="booking-field"><span class="muted">{msg:bookingDate}</span> {page.showing.startsAt.fmtDay}</p>
+    <p class="booking-field"><span class="muted">{msg:bookingTime}</span> {page.showing.startsAt.fmtTime}</p>
+    {/if}
+</div>
+
+{#include customer/seatmapFragment hall=page.hall showing=page.showing rows=rows
+          errorMessage=errorMessage price=page.seatMap.price ageGate=ageGate ageAdvisory=ageAdvisory /}
+
+{! Push registration, exactly as on /halls/{pool}/showings/{session} — this page renders the same
+   seat map, so it needs the same live-availability behaviour. See seatmap.html for why every
+   piece of it is progressive enhancement over the 3 s poll. !}
+<div id="seatmap-push"
+     data-pool-id="{page.hall.resourcePoolId}"
+     data-session-id="{page.showing.resourcePoolSessionId}"
+     {! The same four status lines seatmap.html hands in, for the same reason — seatmap-push.js
+        reads its copy from this element and there is one script for two pages. This is the
+        second-caller shape AgeAdvisoryService's javadoc records: the page that breaks is always
+        the one that renders a shared thing without supplying what the first page supplies.
+        src/test/js asserts both templates carry these, not just seatmap.html. !}
+     data-msg-push-off="{msg:jsPushOff}"
+     data-msg-push-unavailable="{msg:jsPushUnavailable}"
+     data-msg-push-not-registered="{msg:jsPushNotRegistered}"
+     data-msg-push-subscribed="{msg:jsPushSubscribed}"></div>
+<p id="seatmap-push-status" class="muted"></p>
+
+{! .raw because the message emphasises the two labels on Safari's own menu — a bundle method
+   returns a String, so without it HtmlEscaper would print the <strong> tags. Msg.pushIosHint
+   has the argument, and seatmap.html renders the same key the same way. !}
+<p id="seatmap-ios-hint" class="muted" hidden>{msg:pushIosHint.raw}</p>
+
+<script src="/js/seatmap-selection.js{asset:v('js/seatmap-selection.js')}"></script>
+<script src="/js/booking-fields.js{asset:v('js/booking-fields.js')}"></script>
+
+{#head}
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+{/head}
+
+<script type="module" src="/js/seatmap-push.js{asset:v('js/seatmap-push.js')}"></script>
+{/include}

@@ -1,0 +1,60 @@
+{#include base}
+{#title}{msg:homeTitle}{/title}
+{#head}{#include seoHead /}{/head}
+{!
+  The two menus, made the page rather than only the header nav.
+
+  This replaced the city list that used to be here. The city step did not go with it — it is the
+  select in base.html's header, which is where the market's mobile sites keep it and which is on
+  every public page rather than only on this one. So "Cinemas" opens /cinemas, the branches in
+  whichever city that select has chosen, and there is deliberately no all-cities page behind it
+  any more. sites.html's back link points at this page for the same reason; if an all-cities
+  listing is ever wanted again it needs a URL of its own, because "/" is this menu now.
+
+  The two are in the order the market puts them: a visitor either knows the cinema or knows the
+  film, and both routes land on the same showtime.
+
+  The two tile labels reuse the header nav's keys (navCinemas, navNowPlaying) rather
+  than getting their own. They are the same two words naming the same two menus, and a second
+  pair of keys would be an invitation for the header and the page to end up saying different
+  things in Indonesian while still agreeing in English.
+!}
+<h1>{msg:homeTitle}</h1>
+
+<div class="menu-grid">
+    <a class="menu-tile" href="{inject:lang.path('/cinemas')}">
+        {! aria-hidden because the label beside it already says "Cinemas" — without it a screen
+           reader announces the tile twice. Inline rather than an icon font: two glyphs on one
+           page do not justify a dependency, and a font that fails to load leaves a blank square
+           where the tile's subject should be. !}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-5h6v5"/>
+        </svg>
+        <span class="menu-tile-label">{msg:navCinemas}</span>
+        <span class="menu-tile-hint">{msg:homeCinemasHint}</span>
+    </a>
+    <a class="menu-tile" href="{inject:lang.path('/movies')}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <path d="M7 4v16M17 4v16M3 12h18M3 8h4M3 16h4M17 8h4M17 16h4"/>
+        </svg>
+        <span class="menu-tile-label">{msg:navNowPlaying}</span>
+        <span class="menu-tile-hint">{msg:homeMoviesHint}</span>
+    </a>
+</div>
+
+{! Unchanged from the city list this page replaced, and it has to stay: a hall with no branch is
+   reachable from nowhere else, so configuring the first branch would otherwise take every other
+   hall off the public site. !}
+{#if unassignedHalls}
+<div class="card">
+    <h2>{msg:homeUnassignedHeading}</h2>
+    <p class="muted">{msg:homeUnassignedHint}</p>
+    {#for hall in unassignedHalls}
+    <p><a href="{inject:lang.path('/halls/')}{hall.resourcePoolId}">{hall.name}</a></p>
+    {/for}
+</div>
+{/if}
+{/include}

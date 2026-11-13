@@ -1,0 +1,60 @@
+{#include base}
+{#title}{showing.label} — {msg:seatMapTitle}{/title}
+<p><a href="{inject:lang.path('/halls/')}{hall.resourcePoolId}">&larr; {hall.name}</a></p>
+<h1>{showing.label}</h1>
+<p class="muted">{showing.startsAt.fmtDateTime}</p>
+
+{#include customer/seatmapFragment hall=hall showing=showing rows=rows errorMessage=errorMessage price=price ageGate=ageGate ageAdvisory=ageAdvisory ticked=ticked /}
+
+{!
+  Push registration. The data attributes are how the script learns which seat
+  map it is on — it registers a watch scoped to this pool AND session, so a customer watching
+  tonight's showing is not woken by changes to tomorrow's.
+
+  Everything here is progressive enhancement over the polling refresh above: if the script fails,
+  permission is denied, or no Firebase credentials are configured, the map still updates.
+!}
+<div id="seatmap-push"
+     data-pool-id="{hall.resourcePoolId}"
+     data-session-id="{showing.resourcePoolSessionId}"
+     {! The four status lines, handed in for the same reason the seat-taken sentences are: a .js
+        file is outside the message bundle's reach and the template is the only layer that knows
+        the language. All four say the same reassuring thing in different words — the map still
+        refreshes itself — because every one of them is a failure the customer should not have to
+        care about. !}
+     data-msg-push-off="{msg:jsPushOff}"
+     data-msg-push-unavailable="{msg:jsPushUnavailable}"
+     data-msg-push-not-registered="{msg:jsPushNotRegistered}"
+     data-msg-push-subscribed="{msg:jsPushSubscribed}"></div>
+<p id="seatmap-push-status" class="muted"></p>
+
+{! iOS exposes the Push API only from 16.4 and only inside an installed PWA — a plain Safari tab
+   has no access at all — so iOS visitors get a prompt rather than silence. !}
+{! .raw because the message emphasises the two labels on Safari's own menu — a bundle method
+   returns a String, so without it HtmlEscaper would print the <strong> tags. Msg.pushIosHint
+   has the argument. !}
+<p id="seatmap-ios-hint" class="muted" hidden>{msg:pushIosHint.raw}</p>
+
+{! Loaded before the push scripts and independent of them: it reports on htmx swaps, so it works
+   with notifications denied, on iOS in a plain tab, and with no Firebase config at all — the
+   polling refresh is what it actually hangs off. !}
+<script src="/js/seatmap-selection.js{asset:v('js/seatmap-selection.js')}"></script>
+
+{#head}
+{! Opens the gstatic.com socket while the parser is still working, so the deferred Firebase
+   scripts below do not pay DNS + TCP + TLS from a standing start. Scoped to this page on purpose:
+   no other page talks to gstatic, and a hint on a page that never uses it is a wasted socket.
+   crossorigin is NOT optional — those scripts are fetched in CORS mode, and a preconnect without
+   it opens a connection the script fetch cannot reuse, paying for the handshake twice. !}
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+{/head}
+
+{! A module, which is deferred by nature: its two Firebase imports are ~150 KB from a third origin,
+   and reaching gstatic.com costs DNS + TCP + TLS before the first byte — paid on every seat-map
+   view, on cellular, including by everyone who will deny the notification permission. Nothing
+   needed to book waits on it: push is enhancement over the 3 s poll (see seatmap-push.js), so the
+   parser should not block. It runs after the full parse, so #seatmap-push is certain to exist.
+   seatmap-selection.js above is deliberately NOT deferred — it is local and 6.6 KB, so there is
+   nothing to win, and leaving it undeferred keeps it first regardless of what this one does. !}
+<script type="module" src="/js/seatmap-push.js{asset:v('js/seatmap-push.js')}"></script>
+{/include}

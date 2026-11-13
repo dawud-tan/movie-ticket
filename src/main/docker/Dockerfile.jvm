@@ -1,0 +1,25 @@
+# Multi-stage JVM build, for platforms that run only `docker build`: dependency resolution and
+# the package step both happen inside the builder, so the host needs Docker and nothing else.
+#
+# JDK 25 in both stages: .mvn/jvm.config passes --sun-misc-unsafe-memory-access=allow, which
+# does not exist before JDK 23, so an older JDK fails before Maven starts.
+FROM eclipse-temurin:25-jdk AS build
+WORKDIR /code
+COPY mvnw .
+COPY .mvn ./.mvn
+COPY pom.xml .
+RUN ./mvnw -B -q dependency:go-offline
+COPY src ./src
+# -DskipTests also skips the JS checks, so the image build downloads no Node.
+RUN ./mvnw -B package -DskipTests
+
+FROM eclipse-temurin:25-jre
+WORKDIR /work
+# The fast-jar layout: lib/ changes rarely and goes first, so a code change reuses its layer.
+COPY --from=build --chown=1001:0 /code/target/quarkus-app/lib/ ./lib/
+COPY --from=build --chown=1001:0 /code/target/quarkus-app/*.jar ./
+COPY --from=build --chown=1001:0 /code/target/quarkus-app/app/ ./app/
+COPY --from=build --chown=1001:0 /code/target/quarkus-app/quarkus/ ./quarkus/
+EXPOSE 8080
+USER 1001
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-jar", "quarkus-run.jar"]

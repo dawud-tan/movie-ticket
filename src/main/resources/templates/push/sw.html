@@ -1,0 +1,56 @@
+// Compat in the worker, modular in the page: a classic worker cannot import an ES module. The
+// version must match seatmap-push.js's imports, because this version's worker re-registers the
+// page's FID itself on pushsubscriptionchange (read in 12.19.0's source, 2026-10-23).
+importScripts("https://www.gstatic.com/firebasejs/12.19.0/firebase-app-compat.js");
+importScripts("https://www.gstatic.com/firebasejs/12.19.0/firebase-messaging-compat.js");
+
+firebase.initializeApp({
+    apiKey: "{apiKey}",
+    authDomain: "{authDomain}",
+    projectId: "{projectId}",
+    storageBucket: "{storageBucket}",
+    messagingSenderId: "{messagingSenderId}",
+    appId: "{appId}"
+});
+
+const messaging = firebase.messaging();
+
+// Background message: the tab is not focused. No notification is shown here. Every web push
+// carries a `notification` (PushNotificationService.sendToAll), and the SDK shows it and opens its
+// fcmOptions.link on a tap. When this handler showed one too, each push arrived twice (2026-11-06,
+// Chrome 156 on Android). Because the SDK always shows one, userVisibleOnly is met without this.
+//
+// Tell any OPEN copy of that seat map to refresh itself. This is what makes it a live-updating map
+// rather than only a toast. A page that is merely unfocused rather than closed
+// still receives this.
+messaging.onBackgroundMessage((payload) => {
+    const data = payload.data || {};
+    return self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clients) => {
+            for (const client of clients) {
+                client.postMessage({ type: "seat-availability", data: data });
+            }
+        });
+});
+
+// The push's second failure path: "a subscription can rotate, detected via the service
+// worker's pushsubscriptionchange event and re-registered via the same upsert as a fresh watch."
+//
+// The re-registration is the SDK's own listener, registered by firebase.messaging() above: it
+// re-registers the FID with FCM and posts it to the visible pages, where seatmap-push.js's
+// onRegistered handler sends the same /push/subscribe upsert a fresh watch uses. This listener
+// only tells the open pages that the old subscription is gone, so they poll fast for the gap.
+//
+// If no page is open there is nothing to re-subscribe for: the watch only exists while the seat
+// map is open, and the stale row is cleaned up either by the first send reporting the FID
+// UNREGISTERED or by the expiry sweep.
+self.addEventListener("pushsubscriptionchange", (event) => {
+    event.waitUntil(
+        self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+            for (const client of clients) {
+                client.postMessage({ type: "push-subscription-changed" });
+            }
+        })
+    );
+});

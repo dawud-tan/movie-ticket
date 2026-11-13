@@ -1,0 +1,56 @@
+{! Orders (active and past). Before this page existed, a customer's
+   only handle on a booking was the group id in the URL they were redirected to once — so closing
+   the tab lost it, and the counter had no way to find it either. This page and the booking code
+   exist for the same reason: a booking has to be findable by somebody who did not keep a URL.
+
+   ONE ROW PER ORDER, NOT PER SEAT. The aggregate comes from SQL
+   (ReservationGroupRepository.findHistoryForCustomer), so a customer with twenty orders costs
+   one query rather than eighty. Per-seat detail — the barcodes, the cancel buttons, the payment
+   card — stays on the detail page, which is one click away and already renders all of it.
+
+   THE TWO SECTIONS ARE ORDERED THE SAME WAY, most recently paid first. That is the ordering the
+   database applies once; this template does not re-sort, and must not — a second ordering here
+   would be a second answer to the same question.
+
+   NO LANGUAGE PREFIX ON ANY LINK OUT OF HERE except the two public ones. /orders is behind
+   @RolesAllowed and robots.txt disallows it by that prefix, so /id/orders would be a second
+   spelling that list does not cover — LanguagePreference.path has the rule. What keeps this page
+   in the reader's language is the cookie. !}
+{#include base}
+{#title}{msg:navYourOrders}{/title}
+<p><a href="{inject:lang.path('/')}">&larr; {msg:showtimes}</a></p>
+<h1>{msg:navYourOrders}</h1>
+
+{#if orders.isEmpty}
+{! Two different empty states behind one list, and they mean opposite things. A customer with no
+   orders should be sent to the showtimes; staff have no orders of their own by construction —
+   they sell from the counter against the tenant's walk-in placeholder — so telling them "you have
+   not booked anything yet" would read as a fault. !}
+{#if inject:actor.isStaff}
+{! .raw because this message carries the anchor to the booking lookup inside it — a bundle method
+   returns an ordinary String, so without it HtmlEscaper emits the tag as visible text. Safe for
+   seoHead.html's jsonLd.raw reason: the markup is authored in Msg.java and no caller can reach
+   it. Msg.ordersStaffEmpty says why the link is inside the sentence rather than around it. !}
+<p class="muted">{msg:ordersStaffEmpty.raw}</p>
+{#else}
+<p class="muted">{msg:ordersEmpty}</p>
+<p><a class="button" href="{inject:lang.path('/movies')}">{msg:ordersBrowse}</a></p>
+{/if}
+{#else}
+
+<h2>{msg:ordersCurrent}</h2>
+{#for booking in orders.active}
+{#include customer/orderCard booking=booking /}
+{#else}
+<p class="muted">{msg:ordersNoneCurrent}</p>
+{/for}
+
+<h2>{msg:ordersPast}</h2>
+{#for booking in orders.past}
+{#include customer/orderCard booking=booking /}
+{#else}
+<p class="muted">{msg:ordersNonePast}</p>
+{/for}
+
+{/if}
+{/include}

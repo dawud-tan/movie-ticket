@@ -1,0 +1,9 @@
+{! One exchange, appended to #chat-log. turn.answer is the model's text: chatMarkup escapes all of
+   it, then turns its **bold** and pipe tables into the only tags it writes (ChatMarkup). A div, not
+   the <p> it was, because a <table> cannot sit inside a <p>. The link is built server-side from the
+   proposal the tool recorded, never from the model's words. !}
+<div class="card">
+  {#if turn.question}<p><strong>{msg:chatYou}:</strong> {turn.question}</p>{/if}
+  <div class="chat-answer"><strong>{msg:chatAssistant}:</strong> {turn.answer.chatMarkup}</div>
+  {#if turn.link}<p><a href="{turn.link}">{msg:chatOpenSeatMap(turn.seats)}</a></p>{/if}
+</div>

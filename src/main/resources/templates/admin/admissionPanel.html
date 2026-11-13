@@ -1,0 +1,58 @@
+{! The door, one ticket at a time.
+
+   WHY THE WHOLE PANEL SWAPS AND NOT JUST THE RESULT: the input has to come back empty and
+   focused for the next customer, and an usher with a queue in front of them will not click into
+   a field between scans. Re-rendering the form is what clears it; `autofocus` on the freshly
+   swapped input is what htmx honours to put the cursor back. Swapping only a result div would
+   leave the previous ticket's code sitting in the field, and the next scan would append to it.
+
+   WHY THERE IS NO POLLING AND NO JAVASCRIPT OF OUR OWN: a scan is caused by a person, not by
+   elapsed time. A barcode scanner types its payload and presses Enter, so a plain form submit is
+   the entire integration — no camera permission, no device API, and it works identically when
+   the code is typed by hand because the customer's phone is flat.
+
+   A double submit on refresh is harmless here, unlike most POST-renders-HTML: rescanning a token
+   is precisely what `admitted_at IS NULL` makes safe, and the repeat reports ALREADY_ADMITTED
+   rather than admitting anyone twice.
+
+   THE HEADLINE AND THE MESSAGE ARE TRANSLATED IN JAVA, not here: both come off
+   AdmissionService.ScanResult, which resolves them through the bundle for the request's
+   language the same way ShowtimeResource does. severity stays a raw ok/warn/bad because the
+   stylesheet selects on it — the same split StatusLabels makes for a status badge. !}
+<div id="admission-panel">
+
+{#if result}
+<div class="card scan-result {result.outcome.severity}">
+    <h2>{result.headline}</h2>
+    {#if result.seat}
+    <p class="scan-seat">{msg:admScanSeat(result.seat.label)}</p>
+    {/if}
+    <p>{result.message}</p>
+    {#if result.alreadyAdmitted}
+    {! The one refusal where the usher needs a fact rather than an instruction: when it was used
+       tells them whether this is the party's second person scanning the same phone a moment ago,
+       or a ticket that walked in an hour ago. !}
+    <p class="muted">{msg:admScanAdmittedWhen(result.reservation.admittedAt.fmtDateTime)}</p>
+    {/if}
+</div>
+{/if}
+
+<div class="card">
+    <form method="post" action="/admin/showings/{showing.resourcePoolSessionId}/admission"
+          hx-post="/admin/showings/{showing.resourcePoolSessionId}/admission"
+          hx-target="#admission-panel"
+          hx-swap="outerHTML">
+        <label for="admissionToken">{msg:admScanFieldLabel}</label>
+        {! autocomplete/autocorrect/spellcheck off, and autocapitalize=characters: a phone
+           keyboard would otherwise offer the last customer's code as a suggestion and lowercase
+           what is typed. The service uppercases anyway — this is so the field looks right, not
+           so the lookup works. !}
+        <input type="text" id="admissionToken" name="admissionToken" autofocus
+               autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+               placeholder="BPT-…">
+        <button type="submit">{msg:admAdmit}</button>
+    </form>
+    <p class="muted">{msg:admScannerNote}</p>
+</div>
+
+</div>

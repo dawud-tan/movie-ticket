@@ -1,0 +1,15 @@
+{#include base}
+{! "Demo Cinema" stays as it is: the brand is a name, not copy. Same reason base.html's own
+   masthead is not a message key. !}
+{#title}{msg:showtimes} — Demo Cinema{/title}
+{#head}{#include seoHead /}{/head}
+<h1>{msg:hallsHeading}</h1>
+{#for hall in halls}
+<div class="card">
+    <h2><a href="{inject:lang.path('/halls/')}{hall.resourcePoolId}">{hall.name}</a></h2>
+    {#if hall.address}<p class="muted">{hall.address}</p>{/if}
+</div>
+{#else}
+<p class="muted">{msg:hallsEmpty}</p>
+{/for}
+{/include}

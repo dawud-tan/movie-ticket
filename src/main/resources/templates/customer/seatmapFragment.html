@@ -1,0 +1,294 @@
+<div id="seat-map-container">
+  {#if errorMessage}
+  <div class="error-banner">{errorMessage}</div>
+  {/if}
+
+  {!
+    Filled in by seatmap-selection.js when a refresh takes away a seat the customer had already
+    ticked. Deliberately OUTSIDE #seat-grid: the polling refresh swaps only the grid, so a notice
+    placed inside it would be wiped by the very next poll, three seconds after the customer was
+    told. Here it survives until they act on it.
+
+    role="status" rather than role="alert" — assertive would interrupt a screen reader mid-sentence
+    every time a stranger books a seat, which is not proportionate to losing one of several ticks.
+  !}
+  {! The sentences come from here rather than from the script, for the same reason
+     data-signin-url below does: a .js file is outside the message bundle's reach, and the
+     template is the only layer that knows which language this page is in. %seats% is filled in
+     by the script — see Msg.java for why the placeholder is not Qute's own {…}.
+
+     Singular and plural are separate attributes because English needs "is"/"are" and
+     "it"/"they"; the script used to pick between them with a ternary, which was English grammar
+     living in a file that now serves two languages. !}
+  <div id="seat-taken-notice" class="notice-banner" role="status" aria-live="polite" hidden
+       data-msg-taken-one="{msg:jsSeatTakenOne}"
+       data-msg-taken-many="{msg:jsSeatTakenMany}"
+       data-msg-held-one="{msg:jsSeatHeldOne}"
+       data-msg-held-many="{msg:jsSeatHeldMany}"
+       data-msg-and="{msg:jsSeatListAnd}"
+       data-msg-others-selected="{msg:jsOtherSeatsStillSelected}"></div>
+
+  {!
+    Filled in by seatmap-selection.js when the server refuses a request outright — an expired
+    session, or an account whose role may not hold seats. Anything the server can say inside a
+    rendered fragment arrives as HTTP 200 and uses the .error-banner above instead; this one exists
+    only for the statuses htmx will not swap, which would otherwise leave the button looking dead.
+
+    role="alert", unlike the polite notice above: this only ever appears because the customer
+    pressed a button and it did nothing, so interrupting is proportionate here in a way that
+    announcing a stranger's booking is not.
+
+    Outside #seat-grid for the same reason as the notice above — the 3s poll swaps only the grid,
+    so a banner inside it would be wiped a few seconds after the customer was told. A full
+    container swap (the Refresh button, or a successful hold) does clear it, which is correct: by
+    then something has actually changed.
+
+    data-signin-url rather than a literal "/login" in the script. On this deployment sign-in has to
+    be absolute onto the https origin (see SignInLink): a relative /login followed from the
+    http:8080 entry point ends up asking Google for redirect_uri=https://host:8080/callback — right
+    scheme, wrong port, nothing listening for TLS there. The template is the only layer that knows
+    the correct URL, so it passes it in rather than letting the JS guess.
+  !}
+  <div id="seat-error-notice" class="error-banner" role="alert" hidden
+       data-signin-url="{inject:signIn.url}"
+       data-msg-session-expired="{msg:jsHoldSessionExpired}"
+       data-msg-sign-in-again="{msg:jsSignInAgain}"
+       data-msg-not-permitted="{msg:jsHoldNotPermitted}"
+       data-msg-sign-out="{msg:signOut}"
+       data-msg-server-error="{msg:jsHoldServerError}"
+       data-msg-unreachable="{msg:jsHoldUnreachable}"></div>
+
+  {! The three words name the same three seat states the grid below renders as CSS classes, and
+     they come from the same keys StatusLabels maps those classes to — so the legend cannot end up
+     calling a seat something the seat itself does not. !}
+  <div class="legend">
+    <span><span class="dot available"></span>{msg:statusAvailable}</span>
+    <span><span class="dot held"></span>{msg:statusHeld}</span>
+    <span><span class="dot confirmed"></span>{msg:statusConfirmed}</span>
+    {! A mark, not a rule — anyone may book the seat. Shown only where one exists. !}
+    {#if rows.anyAccessible}<span><span aria-hidden="true">&#9855;</span> {msg:seatAccessible}</span>{/if}
+  </div>
+
+  {!
+    The film's age classification, and the attestation the customer makes against it.
+
+    The rating shows whenever the film has one, gated or not: "SU" is information a parent wants
+    before ticking seats, and a badge that appeared only for restricted films would make its
+    absence ambiguous — no rating recorded and rated-for-everybody would look identical.
+
+    The tick box appears only for a restricted rating, and the sentence beside it comes from the
+    server rather than being written here: AgeClassification generates it and BookingService
+    hashes THAT string into consent_record.policy_text_hash. A copy of the wording in this
+    template would be a second source for the one thing the record exists to pin down, and the
+    hash would quietly stop describing what anybody actually read.
+
+    `required` is browser-side and is not the control -- the hold endpoint takes a form POST that
+    nothing stops a caller sending without it, and BookingService refuses that independently. It
+    is here because the field genuinely is required, exactly as it is on the name and phone inputs
+    below; it saves a round trip, it does not decide anything.
+
+    Inside the form but outside #seat-grid, like the banners: the 3s poll swaps only the grid, and
+    a tick box re-rendered every three seconds would clear itself while the customer read it.
+
+    Deliberately NOT hx-preserve, unlike a ticked seat. A failed hold re-renders this whole
+    container and the tick goes with it, which is correct: the tick is an assertion made when the
+    customer presses the button, and carrying it across a re-render would let the second submit
+    inherit an assertion made about the first. Seats are preserved because losing a selection is
+    only annoying; this one is the thing being recorded.
+  !}
+  {#if ageGate}
+  <p class="muted">{msg:seatAgeClassification}: <span class="badge">{ageGate.classification}</span></p>
+  {/if}
+
+  {!
+    The purchase cap. Above the grid, with the legend, on purpose: the point of showing it at all
+    is that the customer reads it BEFORE spending a minute ticking seats, and a hint below the grid
+    is one they meet only after they have already overshot. Read from the same bean BookingService
+    enforces against (see PurchaseCap), so the number here cannot drift from the number that
+    refuses — a page promising 8 against a server refusing at 6 is the failure being avoided.
+
+    Text only, and no client-side enforcement: seatmap-selection.js is explicit that nothing on
+    this page alters the selection or blocks a submit, because the server is the authority. A
+    customer who ticks nine anyway gets the fragment back with the .error-banner above, exactly
+    like every other refusal, with their selection preserved by hx-preserve.
+
+    Outside #seat-grid like the banners above — the 3s poll swaps only the grid, so a hint inside
+    it would be re-rendered every three seconds for no reason.
+
+    Two lines rather than one sentence, because the two caps answer different questions and the
+    second one is the surprising one: a customer who has ticked four seats here can still be
+    refused because of seats they bought this morning for the late show. Stating it up front is
+    the only warning they can get — the browser cannot enforce a per-day cap even in principle,
+    since it does not know what this customer booked before today's page loaded.
+
+    Each line is independently gated, so a tenant who turns one cap off (0) is not left with a
+    dangling half-sentence about the other.
+  !}
+  {#if inject:purchaseCap.enforced}
+  <p class="muted">{msg:seatCapPerBooking(inject:purchaseCap.maxSeatsPerHold)}</p>
+  {/if}
+  {#if inject:purchaseCap.dailyEnforced}
+  <p class="muted">{msg:seatCapPerDay(inject:purchaseCap.maxSeatsPerDay)}</p>
+  {/if}
+
+  {!
+    The viability rule, stated before the grid for the same reason the caps above
+    are: a customer who reads it after ticking one seat has already been refused. Read from the
+    same bean BookingService enforces against (ShowtimeViability), so the number here cannot
+    drift from the number that refuses.
+
+    Shown whenever the rule is in force, not only on a showing with nothing sold. The sentence
+    says "the first booking", which qualifies itself — and the seat map does not know the live
+    count, so gating on it would mean an extra read on the one endpoint every open tab requests
+    on a timer. The rule's second half is stated too, because it is the part that
+    explains the first: a customer told only "buy two" reads it as a sales tactic.
+  !}
+  {#if inject:showtimeViability.enforced}
+  <p class="muted">{msg:seatViability(inject:showtimeViability.minimumSeats, inject:showtimeViability.graceMinutes)}</p>
+  {/if}
+
+  {!
+    THE THREE ENDPOINT URLS BELOW CARRY THE LANGUAGE PREFIX, and they have to. Every one of them
+    answers with this fragment — the poll swaps the grid, the Refresh button swaps the container,
+    and a refused hold re-renders the whole thing — so a bare URL would fall through to the cookie
+    and then to Accept-Language, which in this market is very commonly en-US whoever is holding the
+    phone (LanguagePreference). A visitor who arrived on /id from a pasted link, holding no cookie,
+    would watch this page turn English three seconds after it loaded. robots.txt allows /halls, so
+    the prefixed spelling costs nothing there either — unlike /booking and /orders, which it
+    disallows by prefix and which therefore keep their bare URLs.
+  !}
+  <form hx-post="{inject:lang.path('/halls/')}{hall.resourcePoolId}/showings/{showing.resourcePoolSessionId}/hold"
+        hx-target="#seat-map-container" hx-swap="outerHTML">
+    {!
+      Auto-refreshing availability by polling the fragment endpoint the manual button already
+      uses. Deliberately polling rather than push: push reduces cost at high concurrency, and it is
+      not what makes the map live.
+
+      Three details this depends on, none of them incidental:
+
+      1. hx-select="#seat-grid" with hx-target="this" means ONLY the grid is swapped, even
+         though the endpoint returns this whole fragment. That is what keeps the customer's
+         typed name and phone — and any error banner above — outside the replaced region.
+         Swapping #seat-map-container every 3s would clear the form mid-entry and make booking
+         effectively impossible.
+
+      2. seatmap-selection.js cancels the request while the tab is hidden. htmx keeps the timer
+         running and the fetch is skipped, so there is no network or database work for a
+         backgrounded tab, and it fires one immediate refresh when the tab is shown again, because
+         returning to a stale map is exactly when accuracy matters most. Not a trigger filter
+         ([document.visibilityState === 'visible'], as it was until 2026-11-01): htmx compiles a
+         filter with Function, which the page's Content-Security-Policy refuses, and htmx 2.0.10
+         does not catch that, so the grid's triggers would never be set up.
+
+      3. hx-trigger is set explicitly, which also stops the div's default click trigger from
+         firing a request every time someone picks a seat.
+
+      4. seat-availability-changed is fired by seatmap-push.js when a push arrives, so a
+         notification refreshes the grid immediately instead of waiting up to 3s for the next
+         poll. Push is the latency improvement here; polling remains the mechanism, so the map
+         still works with notifications denied, on iOS in a plain tab, or with no Firebase
+         credentials configured at all.
+
+      "every 3s" above is the safe default rendered here on every response — including every
+      poll's own swap — and is what every visitor gets until seatmap-push.js confirms a live
+      subscription. Once confirmed, that script rewrites #seat-grid's hx-trigger to "every 30s"
+      on each freshly swapped-in grid (push then carries normal-latency updates instead), and
+      puts it back the moment the subscription is known stale. This template only ever emits the
+      3s form; see seatmap-push.js for why the interval otherwise seen in the DOM can differ.
+    !}
+    <div class="seat-grid" id="seat-grid"
+         hx-get="{inject:lang.path('/halls/')}{hall.resourcePoolId}/showings/{showing.resourcePoolSessionId}/fragment"
+         hx-trigger="every 3s, seat-availability-changed"
+         hx-select="#seat-grid"
+         hx-target="this"
+         hx-swap="outerHTML">
+      {#for row in rows}
+      <div class="seat-row">
+        <span class="row-label">{row.rowLabel}</span>
+        {#for seat in row.seats}
+          {#if seat.seatStatus == 'available'}
+          {!
+            hx-preserve keeps this exact element across the swap, so a seat the customer has
+            ticked stays ticked while the rest of the map updates around it.
+
+            It also handles the seat being taken by someone else, by construction rather than by
+            a special case: a taken seat renders as a <span> below with no matching id, so there
+            is nothing to preserve and the new markup wins — the tick disappears along with the
+            seat, which is the correct outcome. The reverse (a hold expiring, taken -> available)
+            works the same way round: no old element with this id exists, so the fresh unticked
+            label renders normally.
+          !}
+          <label class="seat available" data-accessible="{seat.accessible}" title="{seat.label}{#if seat.accessible} ({msg:seatAccessible}){/if}"
+                 id="seat-{seat.resourceUnitId}" hx-preserve="true">
+            <input type="checkbox" name="seatIds" value="{seat.resourceUnitId}"{#if ticked?? && ticked.contains(seat.resourceUnitId)} checked{/if}>
+            {seat.label}
+          </label>
+          {#else}
+          <span class="seat {seat.seatStatus}" data-accessible="{seat.accessible}" title="{seat.label} ({inject:status.of(seat.seatStatus)})">{seat.label}</span>
+          {/if}
+        {/for}
+      </div>
+      {/for}
+    </div>
+
+    {! With calendar pricing the price belongs to the SHOWING, not the hall, so the
+       band is named alongside it. A customer who sees "Rp 35.000" on a Sunday and "Rp 25.000" on a
+       Tuesday and no explanation reads it as a mistake -- or worse, as a price that moves. !}
+    {#if price}
+    <p class="muted">{msg:seatPricePerSeat(price.amount.fmtMoney)}{#if price.bandLabel} <span class="badge">{price.bandLabel}</span>{/if}</p>
+    {#if price.inclusions}
+    <p class="muted">{msg:seatPriceIncludes} {#for line in price.inclusions}{line}{#if !line_isLast}; {/if}{/for}</p>
+    {/if}
+    {/if}
+
+    {! The age advisory. Rendered only when this customer has given us a date of birth on
+       /profile AND it falls short of this film's rating -- ageAdvisory is null in every other
+       case, including for a signed-out viewer, so nothing here changes what an anonymous seat map
+       has always shown.
+
+       It WARNS and does not refuse, because the date is self-declared and nobody checked it. The
+       tick below is still the control: BookingService refuses a restricted hold without it,
+       whether or not this banner was shown. AgeClassification.Advisory carries that argument.
+
+       ABOVE the tick rather than below, deliberately: the customer should read what we think
+       their age is before making the assertion, not after making it.
+
+       notice-banner rather than a third banner style of its own. The stylesheet is compiled
+       ahead of time (`./mvnw package -DskipTests` needs no Node and no network), so a
+       new class would mean a Tailwind rebuild -- and this is a notice, which is what the class
+       already means. The wording carries the difference.
+
+       Outside #seat-grid like the banners above, since the 3s poll swaps only the grid. !}
+    {#if ageAdvisory}
+    <p class="notice-banner" role="alert">{ageAdvisory.message}</p>
+    {/if}
+
+    {#if ageGate}{#if ageGate.restricted}
+    <p class="notice-banner" role="note">
+      <label>
+        <input type="checkbox" name="ageAttested" value="true" required>
+        {ageGate.statement}
+      </label>
+    </p>
+    {! Said plainly rather than left implied: the tick is an assertion by the person buying, and
+       everyone admitted still has to meet the rating at the door. The age attestation scopes this deliberately --
+       it is the same control the incumbent applies online, and it is not identity verification. !}
+    <p class="muted">{msg:seatAgeDoorNote}</p>
+    {/if}{/if}
+
+    <label for="customerName">{msg:seatCustomerName}</label>
+    <input type="text" id="customerName" name="customerName" required>
+
+    <label for="customerPhone">{msg:seatCustomerPhone}</label>
+    <input type="tel" id="customerPhone" name="customerPhone" required>
+
+    <p>
+        <button type="submit">{msg:seatHold}</button>
+        {! Kept as a manual fallback: it costs nothing and still works if the polling filter
+           misbehaves in a browser, or if a customer wants to force a check immediately. !}
+        <button type="button"
+                hx-get="{inject:lang.path('/halls/')}{hall.resourcePoolId}/showings/{showing.resourcePoolSessionId}/fragment"
+                hx-target="#seat-map-container" hx-swap="outerHTML">{msg:seatRefresh}</button>
+    </p>
+  </form>
+</div>

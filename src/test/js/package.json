@@ -1,0 +1,13 @@
+{
+  "name": "booking-platform-web-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser-behaviour tests for the seat map's client-side JavaScript, run by Maven via frontend-maven-plugin.",
+  "type": "module",
+  "scripts": {
+    "test": "node seatmap-selection.test.mjs && node seatmap-push.test.mjs && node city-select.test.mjs && node order-push.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "30.0.1"
+  }
+}

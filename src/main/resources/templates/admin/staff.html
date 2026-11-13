@@ -1,0 +1,73 @@
+{#include base}
+{#title}{msg:admStaffLevel} — {msg:navTenantAdmin}{/title}
+<p><a href="/admin">&larr; {msg:navTenantAdmin}</a></p>
+<h1>{msg:admStaffLevel}</h1>
+
+{! Still English: whatever the service layer threw. !}
+{#if error}
+<div class="error-banner">{error}</div>
+{/if}
+
+{! Says what the two levels actually mean in a cinema's terms, because "role" and "capability"
+   are our words and not the words of whoever runs the counter.
+
+   .raw on the first: Managers is bold because the paragraph's whole job is to say what the
+   second level adds, and that is the word the reader is scanning for. !}
+<div class="card">
+    <p>{msg:admStaffLevels.raw}</p>
+    <p class="muted">{msg:admStaffHowToAdd}</p>
+</div>
+
+<div class="card">
+    <h2>{msg:admAddStaff}</h2>
+    <form method="post" action="/admin/staff">
+        <label for="email">{msg:admStaffEmail}</label>
+        <input type="email" id="email" name="email" placeholder="nama@example.com" required>
+        <p class="muted">{msg:admStaffEmailNote}</p>
+        <p><button type="submit">{msg:admAdd}</button></p>
+    </form>
+</div>
+
+<div class="card">
+    <h2>{msg:admCurrentStaff}</h2>
+    <table>
+        <tr><th>{msg:admEmail}</th><th>{msg:admLevel}</th><th>{msg:admSignedIn}</th><th></th><th></th></tr>
+        {#for member in staff}
+        <tr>
+            <td>
+                {member.email}
+                {#if member.appUserId == selfAppUserId}<span class="badge">{msg:admYou}</span>{/if}
+            </td>
+            <td>
+                {#if member.canManageStaff}{msg:admManager}{#else}{msg:admStaffLevel}{/if}
+                {#if !member.active} <span class="badge">{msg:admDeactivatedBadge}</span>{/if}
+            </td>
+            <td>
+                {! Never having signed in is a normal state for a row added here minutes ago, and
+                   the distinction matters when someone reports they cannot get in: an address
+                   that has never bound a subject is usually the wrong address. !}
+                {#if member.lastLoginAt}{member.lastLoginAt.fmtDateTime}{#else}<span class="muted">{msg:admNever}</span>{/if}
+            </td>
+            <td>
+                <form method="post" action="/admin/staff/{member.appUserId}/manager">
+                    <input type="hidden" name="canManage" value="{#if member.canManageStaff}false{#else}true{/if}">
+                    <button type="submit">{#if member.canManageStaff}{msg:admRemoveManager}{#else}{msg:admMakeManager}{/if}</button>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="/admin/staff/{member.appUserId}/active">
+                    <input type="hidden" name="active" value="{#if member.active}false{#else}true{/if}">
+                    <button type="submit" {#if member.active}class="danger"{/if}>
+                        {#if member.active}{msg:admDeactivate}{#else}{msg:admReactivate}{/if}</button>
+                </form>
+            </td>
+        </tr>
+        {#else}
+        {! Unreachable in practice — a manager is staff, so the person reading this page is
+           already a row in it. Present because the alternative is a table that renders as a
+           bare header if that assumption ever stops holding. !}
+        <tr><td colspan="5" class="muted">{msg:admNoStaff}</td></tr>
+        {/for}
+    </table>
+</div>
+{/include}

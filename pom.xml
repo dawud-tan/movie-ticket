@@ -1,0 +1,648 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.protek</groupId>
+    <artifactId>booking-platform</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- Reproducible jars. Without this, two clean `package` runs of an unchanged tree
+             gave four jars with different sha1s (quarkus-run.jar, app/, generated- and
+             transformed-bytecode.jar) whose unzipped contents and entry order were identical:
+             the only difference was each zip entry's mtime, i.e. the build time. Quarkus 3.40.1
+             honours this property for every jar it writes; the value is a label, not a date to
+             keep current.
+             The other half is `-Duser.timezone=UTC` in .mvn/jvm.config: a zip entry's DOS time
+             field is written in the build JVM's local zone, so even with this pinned a build
+             under TZ=UTC hashed differently from one under WIB (checked
+             2026-10-08). It cannot live here — the JVM's default zone is fixed before Maven
+             reads a pom — and jvm.config takes no comments, hence this note. -->
+        <project.build.outputTimestamp>2026-10-08T00:00:00Z</project.build.outputTimestamp>
+
+        <!-- Stack versions — pinned deliberately, not floated to "latest".
+             Re-pinned 2026-08-22: each is the newest *stable* release, never a prerelease.
+             At that date the BOM's own <latest> was 3.39.0.CR1 and Kotlin's was 2.4.20-RC;
+             taking either would put a release candidate in production, so both were
+             passed over for the newest final.
+             Read repo1's maven-metadata.xml, not search.maven.org — that index is stale
+             enough to report versions *older* than what is already pinned here (it answered
+             3.23.0.CR1 for this BOM while 3.37.2 was in the tree), which reads as "already
+             up to date" and silently ends the upgrade before it starts. -->
+        <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
+        <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
+        <!-- Before bumping this, check that each extension versioned apart from this BOM has a
+             release built against the new Quarkus: today that is quarkus-langchain4j (below).
+             The BOM does not manage it, so nothing fails at the bump; a mismatch shows up later,
+             at build or at run time. The release's <quarkus.version> says which Quarkus it was
+             built against:
+               curl -s https://repo1.maven.org/maven2/io/quarkiverse/langchain4j/quarkus-langchain4j-parent/V/quarkus-langchain4j-parent-V.pom | grep -o '<quarkus.version>[^<]*'
+             Without one, wait. 2026-11-05: 4.0.0.Beta3 was out, but quarkus-langchain4j's newest
+             release, 2.0.0.Beta2, was built against 4.0.0.Beta2. -->
+        <quarkus.platform.version>4.0.0.Beta2</quarkus.platform.version>
+        <postgresql.jdbc.version>42.7.14</postgresql.jdbc.version>
+        <!-- Pinned DOWN from what the BOMs resolve (5.6.1), and this one is a native-image
+             constraint rather than a taste. httpclient5 5.6 added zstd content-encoding support,
+             whose InflatingZstdDataConsumer references com.github.luben.zstd.ZstdDecompressCtx —
+             an OPTIONAL dependency nothing here provides. Under the global link-at-build-time
+             flag Quarkus passes, native-image will not tolerate an unresolvable type in a
+             reachable class, so the image fails with:
+               Error: Discovered unresolved type during parsing:
+                 com.github.luben.zstd.ZstdDecompressCtx ... registered for linking at image
+                 build time
+             The alternative is adding zstd-jni, a JNI library, to satisfy a content encoding no
+             Google API this application calls has ever sent. 5.5.2 is the newest release with no
+             zstd classes at all (verified by listing the jars: 5.5.2 has 0, every 5.6.x has 5),
+             and it is still well ahead of the 5.3.1 this build resolved before the 2026-09-01
+             sync — so this is a pin, not a regression to the old state.
+             Revisit when either httpclient5 makes zstd properly optional at link time or Quarkus
+             stops requiring build-time linking for third-party classes. -->
+        <httpclient5.version>5.5.2</httpclient5.version>
+        <!-- Google's official Cloud SQL JDBC connector. Not a driver: it wraps
+             pgJDBC as a java.net.SocketFactory that authenticates to the Cloud SQL Admin API
+             with the service's own ADC identity and opens a mutually-authenticated TLS tunnel,
+             so no password crosses the network in the clear, no IP is allow-listed by hand,
+             and no Cloud SQL Auth Proxy sidecar is needed. Cloud Run has no sidecar in the
+             default (single-container) revision, which is why this is the connector rather
+             than the proxy.
+             r2dbc/`-jdbc-socket-factory-core` are pulled transitively; pin only this. -->
+        <cloudsql.socket-factory.version>1.30.0</cloudsql.socket-factory.version>
+        <firebase-admin.version>9.11.0</firebase-admin.version>
+
+        <surefire.useModulePath>false</surefire.useModulePath>
+
+        <!-- Browser-behaviour tests (src/test/js). Pinned like every other version here.
+             The build downloads its own Node rather than using whatever is on PATH, so the
+             test behaves identically on a laptop, a server and any future CI, and
+             "works on my machine" cannot happen. Cost: one ~30MB download per version into
+             target/, and `mvn test` needs network the first time.
+             Skip with -DskipJsTests (or -DskipTests, which skips them via the profile below).
+             Node tracks the *active* LTS line, not merely the newest release: v26 (Lithium)
+             from its first LTS release, v26.13.0 on 2026-10-28, moved off v24 (Krypton) as v24
+             went to maintenance. v24 had replaced v22 (Jod) the same way on 2026-08-22. -->
+        <node.version>v26.13.0</node.version>
+        <frontend-maven-plugin.version>2.0.2</frontend-maven-plugin.version>
+        <skipJsTests>false</skipJsTests>
+        <!-- The booking assistant. The release built against the Quarkus pinned above (its parent
+             pom's <quarkus.version> is 4.0.0.Beta2); a pre-release, like the platform. The
+             assistant was benchmarked on 2.0.0.Beta1 with Quarkus 4.0.0.Beta1. -->
+        <quarkus-langchain4j.version>2.0.0.Beta2</quarkus-langchain4j.version>
+        <ktoon.version>6.0.0</ktoon.version>
+
+        <!-- Kotlin since 2026-10-09: com.protek.booking's main sources were converted from Java. -->
+        <kotlin.version>2.4.21</kotlin.version>
+        <kotlin.code.style>official</kotlin.code.style>
+        <!-- Plugin pins. compiler-plugin stays on the 3.x line: 4.0.0 is
+             still -beta, and it is declared only to switch javac off below. -->
+        <compiler-plugin.version>3.16.0</compiler-plugin.version>
+        <surefire-plugin.version>3.6.1</surefire-plugin.version>
+        <failsafe-plugin.version>3.6.1</failsafe-plugin.version>
+        <kotlin.compiler.daemon>false</kotlin.compiler.daemon>
+        <kotlin.compiler.incremental>false</kotlin.compiler.incremental>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkiverse.langchain4j</groupId>
+                <artifactId>quarkus-langchain4j-bom</artifactId>
+                <version>${quarkus-langchain4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>${httpclient5.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- The booking assistant: an AI service with @Tool over /api/app's reads, talking to an
+             OpenAI-compatible endpoint (Groq's free tier for the demo). Tool results are TOON,
+             as the benchmark measured them. -->
+        <dependency>
+            <groupId>io.quarkiverse.langchain4j</groupId>
+            <artifactId>quarkus-langchain4j-openai</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.lukelast.ktoon</groupId>
+            <artifactId>ktoon-jvm</artifactId>
+            <version>${ktoon.version}</version>
+        </dependency>
+        <!-- Web: REST + Qute + HTMX server rendering -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-qute</artifactId>
+        </dependency>
+        <!-- No quarkus-rest-jackson since 2026-10-09: REST JSON is kotlinx.serialization,
+             written in Jackson's bytes by web/RestJsonWriter.kt. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-kotlin</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-kotlin-serialization</artifactId>
+        </dependency>
+        <!-- The live seat map and order over a WebSocket (/api/app/live).
+             It brings quarkus-jackson, which registers no REST provider; RestJsonWriterTest is the
+             check that the REST bytes did not move. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-websockets-next</artifactId>
+        </dependency>
+
+        <!-- Data access: Agroal-pooled plain JDBC, no ORM -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-agroal</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-flyway</artifactId>
+        </dependency>
+
+        <!-- Explicit pgJDBC version pin (Quarkus BOM would otherwise choose its own) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${postgresql.jdbc.version}</version>
+        </dependency>
+
+        <!-- NOTE: the Cloud SQL connector is NOT here. It lives in the `cloudsql-connector`
+             profile at the bottom of this file, which is OFF by default, and the reason is
+             recorded there. The shipped default reaches Cloud SQL over
+             plain TCP, which needs no dependency at all beyond pgJDBC above. -->
+
+        <!-- Scheduled hold-expiry sweep -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-scheduler</artifactId>
+        </dependency>
+        <!-- TimestampAuthority's RFC 3161 request and reply (org.bouncycastle.tsp), for the audit
+             chain's hourly anchor. No <version>: quarkus-bom manages the org.bouncycastle family.
+             BC is not registered as a JCA provider: the reply's signature is checked through the
+             JDK's providers. -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk18on</artifactId>
+        </dependency>
+        <!-- The buyer's email when a showing is cancelled or a refund is sent or refused.
+             Off until SMTP settings are given (application.properties); tests use the mock mailbox. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-mailer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-config-yaml</artifactId>
+        </dependency>
+
+        <!-- Authentication/authorization. quarkus-oidc brings
+             quarkus-security transitively, which is what actually enforces
+             @RolesAllowed — the first rule is that hiding a nav link is not a security
+             boundary, so the enforcement has to come from the container, per endpoint. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-oidc</artifactId>
+        </dependency>
+
+        <!--
+            Firebase Admin SDK — its reflect-config/resource-config
+            (META-INF/native-image/com.protek/booking-platform) was worked out per a
+            native-image checklist ahead of any real caller, and PushNotificationService now
+            actually exercises the send path for real (FCM-token-mediated messaging via
+            resource_pool_watch), reusing that same reflection surface rather than
+            re-deriving it.
+
+            google-cloud-storage and google-cloud-firestore are excluded: they're hard
+            (non-optional) dependencies of firebase-admin for products this app never uses
+            (push uses Messaging/FCM only, which is plain REST over google-http-client,
+            not gRPC), but they drag in google-cloud-storage/firestore's entire gRPC + GAX +
+            Netty-shaded + OpenTelemetry transitive tree. That tree is what broke the native
+            build (grpc-netty-shaded's bundled GraalVM Feature force-build-time-links Netty's
+            logger-factory fallback chain, which unconditionally references Log4j2 classes
+            that aren't on the classpath). Excluding the unused products removes the actual
+            problem instead of patching around an unused dependency graph with a growing list
+            of initialize-at-run-time flags.
+        -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>${firebase-admin.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.cloud</groupId>
+                    <artifactId>google-cloud-storage</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.cloud</groupId>
+                    <artifactId>google-cloud-firestore</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- firebase-admin's FirebaseOptions unconditionally eagerly constructs a
+             JacksonFactory as its class-level default JSON factory (even when
+             .setJsonFactory(...) requests something else — the default is built before
+             that override is consulted), so this needs to be present even though
+             google-http-client-gson (already pulled in for the reflect-config work) is
+             what actually gets used at runtime. Originally test-scoped (only
+             FirebaseAdcInitManualCheck used it), but PushNotificationService now hits the
+             exact same FirebaseOptions constructor from production code — confirmed via a
+             real NoClassDefFoundError: com/google/api/client/json/jackson2/JacksonFactory
+             thrown from FirebaseOptions.<init> during a live test — so this needs to be on
+             the main classpath now, not just test.
+
+             No <version>, on purpose: quarkus-bom manages the whole com.google.http-client
+             family, and a BOM imported here outranks the libraries-bom that firebase-admin
+             (pinned above) brings in transitively, so the core, -gson and -apache-v2 already
+             take the BOM's version; leaving this module to the same BOM keeps the four
+             together. Until 2026-10-09 this pinned 1.47.1, which matched because
+             quarkus-bom 3.40.1 also said 1.47.1. The 4.0.0.Beta1 bump (e5d8a9f) moved the
+             other three to 2.2.0 and left this one behind. That skew happened not to fail —
+             only the class has to load — and no test noticed, since none reached
+             FirebaseOptions then (the push tests swap in RecordingPushService, and the real
+             sender needs ADC first). FirebaseClasspathTest does now: it fails when the four
+             versions disagree (as 1.47.1 under 2.2.0 did) and when this module is missing.
+             `./mvnw dependency:tree -Dincludes='com.google.http-client:*'` prints the four. -->
+        <dependency>
+            <groupId>com.google.http-client</groupId>
+            <artifactId>google-http-client-jackson2</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            Version managed by the quarkus-bom import above (2.0.5) — the same
+            Testcontainers release Quarkus Dev Services itself uses. Needed directly
+            (not just transitively) by the differential concurrency tests, which stand
+            up their own scratch Postgres container outside Dev Services to test a
+            deliberately weakened schema.
+        -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            @TestSecurity — injects a SecurityIdentity with chosen roles directly, so the
+            authorization tests the first rule demands (a customer-role identity getting 403
+            on an admin URL) run without standing up a real Google OIDC provider. That
+            matters beyond convenience: it means the 403 assertion is testing this app's
+            @RolesAllowed wiring, not Google's login page.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>${quarkus.platform.group-id}</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <version>${quarkus.platform.version}</version>
+                <extensions>true</extensions>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>build</goal>
+                            <goal>generate-code</goal>
+                            <goal>generate-code-tests</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-maven-plugin</artifactId>
+                <version>${kotlin.version}</version>
+                <executions>
+                    <execution>
+                        <id>compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>test-compile</id>
+                        <phase>test-compile</phase>
+                        <goals>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-allopen</artifactId>
+                        <version>${kotlin.version}</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-serialization</artifactId>
+                        <version>${kotlin.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <javaParameters>true</javaParameters>
+                    <jvmTarget>25</jvmTarget>
+                    <compilerPlugins>
+                        <plugin>all-open</plugin>
+                        <plugin>kotlinx-serialization</plugin>
+                    </compilerPlugins>
+                    <pluginOptions>
+                        <option>all-open:annotation=jakarta.ws.rs.ApplicationPath</option>
+                        <option>all-open:annotation=jakarta.ws.rs.Path</option>
+                        <option>all-open:annotation=jakarta.enterprise.context.ApplicationScoped</option>
+                    </pluginOptions>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${compiler-plugin.version}</version>
+                <!-- javac is off: since 2026-10-17 no source in the build is Java (the tests and
+                     GeographicLib came across as Kotlin). Packaging `jar` binds this
+                     plugin to compile and test-compile whether or not it is declared, so it is
+                     declared only to unbind both. A .java file added now is read by kotlinc for
+                     symbols but never compiled — its class is missing at runtime, not at build
+                     time.
+
+                     Until 2026-10-17 this block ran javac in executions of its own after kotlinc,
+                     and had to stay declared after kotlin-maven-plugin: within one phase Maven runs
+                     executions in declaration order. -->
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${surefire-plugin.version}</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${failsafe-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <systemPropertyVariables>
+                                <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
+                                <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
+                                <maven.home>${maven.home}</maven.home>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!--
+              Runs src/test/js in the `test` phase, so `./mvnw test` covers the seat map's
+              client-side behaviour alongside the JVM tests.
+
+              This exists because that behaviour is unreachable from the JVM. The seat revert
+              works through htmx's hx-preserve semantics during a DOM swap; the full Java suite
+              passed while the notice naming the lost seat did not exist at all, and while the
+              subscribe endpoint returned 500 over the wire. A browser test in a Maven build is
+              the price of testing browser behaviour.
+            -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>${frontend-maven-plugin.version}</version>
+                <configuration>
+                    <workingDirectory>src/test/js</workingDirectory>
+                    <!-- Under target/ so it is already gitignored and `mvn clean` resets it. -->
+                    <installDirectory>${project.build.directory}</installDirectory>
+                    <skip>${skipJsTests}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <goals><goal>install-node-and-npm</goal></goals>
+                        <phase>generate-test-resources</phase>
+                        <configuration>
+                            <nodeVersion>${node.version}</nodeVersion>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-install</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-test-resources</phase>
+                        <configuration>
+                            <!-- install, not ci: `ci` wipes and reinstalls node_modules on every
+                                 build. The committed package-lock.json is what pins versions, and
+                                 install honours it. -->
+                            <arguments>install --no-audit --no-fund</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-test</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>test</phase>
+                        <configuration>
+                            <arguments>test</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <!--
+          -DskipTests must skip the JS tests too. Without this the flag used for every
+          production package build (see deploy notes and the native build command) would still
+          try to download Node and run jsdom, which would make packaging need network and fail
+          on a box that has none.
+        -->
+        <profile>
+            <id>skip-js-tests-with-skip-tests</id>
+            <activation>
+                <property><name>skipTests</name></property>
+            </activation>
+            <properties>
+                <skipJsTests>true</skipJsTests>
+            </properties>
+        </profile>
+        <profile>
+            <id>skip-js-tests-with-maven-test-skip</id>
+            <activation>
+                <property><name>maven.test.skip</name></property>
+            </activation>
+            <properties>
+                <skipJsTests>true</skipJsTests>
+            </properties>
+        </profile>
+        <!-- Google's official Cloud SQL JDBC connector, OFF BY DEFAULT.
+             ./mvnw package -Dcloudsql.connector    (and set CLOUD_SQL_INSTANCE at deploy time)
+
+             WHAT IT BUYS: it plugs into pgJDBC's `socketFactory` hook exactly where a
+             unix-socket factory would, authenticates with the revision's own service account
+             (ADC, no key file), and opens a mutually-authenticated TLS tunnel keyed off
+             `cloudSqlInstance`. Nothing allow-listed by IP, no password on the wire, and the
+             instance may keep Public IP off entirely. On a JVM it is strictly nicer than TCP.
+
+             WHY IT IS NOT THE DEFAULT, and this is measurement rather than caution: a native
+             build is a GraalVM native image, and 1.30.0 does not build into one out of the box.
+             Four native builds, four distinct failures, each deeper than the last:
+
+               1. dnsjava's org.xbill.DNS.Header holds a static SecureRandom, and native-image
+                  refuses a seeded Random in the image heap. (Reached not through the connector
+                  but through Narayana calling InetAddress.getLocalHost from a class initializer.)
+               2. Excluding dnsjava to fix that fails: InternalConnectorRegistry references
+                  DnsJavaResolver unconditionally. NoClassDefFoundError: org/xbill/DNS/TextParseException.
+               3. jnr-unixsocket -> jnr-ffi -> jffi puts a java.lang.ref.Cleaner and then a
+                  NativeInvocationHandler proxy in the image heap. Deferring `jnr` and `com.kenai`
+                  to run-time initialization clears both.
+               4. The remaining wall: com.google.cloud:google-cloud-sql drags in the WHOLE
+                  gRPC/gax/xds/conscrypt tree, including grpc-netty-shaded — which is precisely
+                  what the google-cloud-storage/google-cloud-firestore exclusions above already
+                  remove from firebase-admin, and for exactly the same reason (README, native
+                  image issue 2). Under the global link-at-build-time flag Quarkus passes, it fails on three
+                  unresolved OPTIONAL types at once: grpc-netty-shaded's Log4J2Logger, httpclient5's
+                  ZstdDecompressCtx, and dnsjava's Windows-only resolver provider. Resolving them
+                  means adding log4j-api plus two JNI libraries (jna, zstd-jni) to a booking
+                  application to satisfy code paths none of which will ever execute on Linux.
+                  Excluding google-cloud-sql instead is not available either: SqlDataClient and
+                  SqlDataSocket reference it, so that repeats failure 2 one library over.
+
+             So the default is TCP, which needs no dependency and no native-image argument, and
+             this profile is here so the connector is one flag away the day someone finishes that
+             work. On the JVM none of it applies, and the profile works as it is.
+             The `initialize-at-run-time` entries for `org.xbill.DNS`, `jnr` and `com.kenai` are
+             left in application.properties unconditionally: they are PACKAGE-form, which GraalVM
+             accepts when nothing matches, so they cost nothing with the profile off and are
+             already correct with it on. -->
+        <profile>
+            <id>cloudsql-connector</id>
+            <activation>
+                <property>
+                    <name>cloudsql.connector</name>
+                </property>
+            </activation>
+            <dependencyManagement>
+                <dependencies>
+                    <!-- Pins the google-auth-library FAMILY to one version, and it is load-bearing
+                         rather than tidy-up. It lives INSIDE this profile because the split it fixes
+                         only exists when the connector does: firebase-admin on its own resolves a
+                         consistent 1.47.0 pair, which is what it was tested against, and pinning the
+                         whole tree forward for a dependency that is not in the default build would be
+                         changing firebase's transitives for nothing.
+                         The Cloud SQL connector wants 1.50.0 of both
+                         -credentials and -oauth2-http; firebase-admin pins -oauth2-http at 1.47.0.
+                         Maven's nearest-wins then resolves -credentials to 1.50.0 and -oauth2-http to
+                         1.47.0 — a split pair inside one library, which is exactly the failure the
+                         google-http-client-jackson2 comment further down describes: it builds cleanly
+                         and surfaces at runtime as a NoSuchMethodError on the credentials path, i.e.
+                         on the first Cloud SQL connection or the first push.
+                         Verified with: ./mvnw dependency:tree -Dverbose -Dincludes='com.google.auth:*'
+                         which must show ONE version for both artifacts and no "omitted for conflict".
+                         1.50.0 rather than 1.47.0 because the connector is the newer consumer and the
+                         API firebase-admin uses (GoogleCredentials, ServiceAccountCredentials) is
+                         unchanged across the gap; drag it backwards and the connector is the one
+                         running untested. -->
+                    <dependency>
+                        <groupId>com.google.auth</groupId>
+                        <artifactId>google-auth-library-bom</artifactId>
+                        <version>1.50.0</version>
+                        <type>pom</type>
+                        <scope>import</scope>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+            <dependencies>
+                <!-- Even with this profile ON, the connector is inert unless the JDBC URL names
+                     it: `socketFactory=...` and `cloudSqlInstance=...` are in DATABASE_URL, so
+                     the TCP form in application.properties simply never touches this jar. -->
+                <dependency>
+                    <groupId>com.google.cloud.sql</groupId>
+                    <artifactId>postgres-socket-factory</artifactId>
+                    <version>${cloudsql.socket-factory.version}</version>
+                    <exclusions>
+                        <!-- Already on the classpath via firebase-admin, at the version its own
+                             libraries-bom resolved. A second copy is exactly the split the
+                             google-http-client-jackson2 comment above describes. -->
+                        <exclusion>
+                            <groupId>com.google.guava</groupId>
+                            <artifactId>guava</artifactId>
+                        </exclusion>
+                    </exclusions>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>native</id>
+            <activation>
+                <property>
+                    <name>native</name>
+                </property>
+            </activation>
+            <properties>
+                <skipITs>false</skipITs>
+                <quarkus.package.jar.enabled>false</quarkus.package.jar.enabled>
+                <quarkus.native.enabled>true</quarkus.native.enabled>
+            </properties>
+        </profile>
+    </profiles>
+</project>

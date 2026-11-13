@@ -1,0 +1,40 @@
+{#include base}
+{#title}{showing.label} — {msg:admReservations}{/title}
+<p><a href="/admin/halls/{hall.resourcePoolId}">&larr; {hall.name}</a></p>
+<h1>{showing.label}</h1>
+{! The badge is two uses of one column value, and only one of them is copy: class= must stay the
+   literal the schema writes because the stylesheet selects on it, the word the reader sees goes
+   through StatusLabels. Exactly the split every customer/ badge already makes. !}
+<p class="muted">{showing.startsAt.fmtDateTime} &mdash; <span class="badge {showing.status}">{inject:status.of(showing.status)}</span></p>
+
+{! The way to the door. Here rather than in the site header because admission is scoped to
+   one showing — an usher opens the screening they are manning, and there is no such thing as a
+   cinema-wide scan page to link to globally. !}
+<p><a class="button" href="/admin/showings/{showing.resourcePoolSessionId}/admission">{msg:admScanAtDoor}</a></p>
+
+<div class="card">
+    <p class="muted">{msg:admClickSeatToRelease}</p>
+    <div class="legend">
+        <span><span class="dot available"></span>{inject:status.of('available')}</span>
+        <span><span class="dot held"></span>{msg:admLegendHeldClick}</span>
+        <span><span class="dot confirmed"></span>{msg:admLegendConfirmedClick}</span>
+    </div>
+    <div class="seat-grid">
+        {#for row in rows}
+        <div class="seat-row">
+            <span class="row-label">{row.rowLabel}</span>
+            {#for seat in row.seats}
+                {#if seat.seatStatus == 'available'}
+                <span class="seat available" title="{seat.label}">{seat.label}</span>
+                {#else}
+                <form class="inline-form" method="post" action="/admin/reservations/{seat.reservationId}/cancel">
+                    <input type="hidden" name="sessionId" value="{showing.resourcePoolSessionId}">
+                    <button type="submit" class="seat {seat.seatStatus}" title="{msg:admCancelSeat(seat.label)}">{seat.label}</button>
+                </form>
+                {/if}
+            {/for}
+        </div>
+        {/for}
+    </div>
+</div>
+{/include}

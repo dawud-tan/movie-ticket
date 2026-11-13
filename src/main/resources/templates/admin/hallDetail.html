@@ -1,0 +1,255 @@
+{#include base}
+{#title}{hall.name} — {msg:navTenantAdmin}{/title}
+<p><a href="/admin">&larr; {msg:admAllHalls}</a></p>
+<h1>{hall.name}</h1>
+
+{#if sites}
+<div class="card">
+    <h2>{msg:admBranch}</h2>
+    {#if currentSite}
+    <p>{currentSite.name} — {currentSite.city}{#if currentSite.province}, {currentSite.province}{/if}</p>
+    {#else}
+    <p class="muted">{msg:admHallNoBranch}</p>
+    {/if}
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/site">
+        <label for="siteId">{msg:admMoveToBranch}</label>
+        <select id="siteId" name="siteId">
+            {#for site in sites}
+            <option value="{site.siteId}">{site.name} ({site.city})</option>
+            {/for}
+        </select>
+        <p><button type="submit">{msg:admAssign}</button></p>
+    </form>
+</div>
+{/if}
+
+<div class="card">
+    <h2>{msg:admSeatMapHeading(seats.size)}</h2>
+    <table>
+        <tr><th>{msg:admLabel}</th><th>{msg:admRow}</th><th>{msg:admSequence}</th></tr>
+        {#for seat in seats}
+        <tr><td>{seat.label}</td><td>{seat.groupKey}</td><td>{seat.sequenceNo}</td></tr>
+        {#else}
+        <tr><td colspan="3" class="muted">{msg:admNoSeatsYet}</td></tr>
+        {/for}
+    </table>
+
+    {! .raw, and the longest message in the bundle. It is the one paragraph a tenant reads before
+       doing the only irreversible-looking thing on this page, and each of its four emphases
+       marks a word that changes what happens: add vs replace, retired vs deleted. !}
+    <p class="muted">{msg:admSeatFormsIntro.raw}</p>
+
+    <h3>{msg:admGenerateRows}</h3>
+    <p class="muted">{msg:admGenerateRowsNote}</p>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/plan">
+        <input type="hidden" name="mode" value="uniform">
+        <label for="rows">{msg:admRowsLabel}</label>
+        <input type="text" id="rows" name="rows" placeholder="A-K" required>
+        <label for="seatsPerRow">{msg:admSeatsPerRow}</label>
+        <input type="number" id="seatsPerRow" name="seatsPerRow" min="1" placeholder="12" required>
+        {! Relayout. Off by default, because "add these seats" is the common
+           request and "re-seat the whole studio" is the rare, consequential one. !}
+        <label class="muted"><input type="checkbox" name="replace" value="on">
+            {msg:admReplaceWholeMap}</label>
+        <p><button type="submit">{msg:admPreview}</button></p>
+    </form>
+
+    <h3>{msg:admGenerateIrregular}</h3>
+    <p class="muted">{msg:admGenerateIrregularNote}</p>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/plan">
+        <input type="hidden" name="mode" value="spec">
+        <label for="spec">{msg:admSeatPlan}</label>
+        {! The placeholder is the parser's own syntax, so it stays as it is written — the aisle
+           comment is part of the worked example, not a sentence. !}
+        <textarea id="spec" name="spec" rows="8" cols="40"
+                  placeholder="A: 1-10&#10;B: 1-10&#10;C: 1-4, 7-12   # aisle&#10;D: 1-8"></textarea>
+        <label class="muted"><input type="checkbox" name="replace" value="on">
+            {msg:admReplaceWholeMap}</label>
+        <p><button type="submit">{msg:admPreview}</button></p>
+    </form>
+
+    <h3>{msg:admImportSeatFile}</h3>
+    {! .raw: the <code> spans are the file's own column names. A reader holding their spreadsheet
+       against this paragraph is looking for the literal words, so those stay in monospace and
+       stay untranslated. !}
+    <p class="muted">{msg:admImportSeatFileNote.raw}</p>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/csv"
+          enctype="multipart/form-data">
+        <label for="file">{msg:admSeatFile}</label>
+        <input type="file" id="file" name="file" required
+               accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+        <label class="muted"><input type="checkbox" name="replace" value="on">
+            {msg:admReplaceWholeMap}</label>
+        <p><button type="submit">{msg:admPreview}</button></p>
+    </form>
+
+    {#if otherHalls}
+    <h3>{msg:admCopyLayout}</h3>
+    <p class="muted">{msg:admCopyLayoutNote}</p>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats/plan">
+        <input type="hidden" name="mode" value="clone">
+        <label for="sourcePoolId">{msg:admCopyFrom}</label>
+        <select id="sourcePoolId" name="sourcePoolId" required>
+            {#for other in otherHalls}
+            <option value="{other.resourcePoolId}">{other.name}</option>
+            {/for}
+        </select>
+        <label class="muted"><input type="checkbox" name="replace" value="on">
+            {msg:admReplaceWholeMap}</label>
+        <p><button type="submit">{msg:admPreview}</button></p>
+    </form>
+    {/if}
+
+    <h3>{msg:admAddSingleSeat}</h3>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/seats">
+        <label for="label">{msg:admSeatLabelField}</label>
+        <input type="text" id="label" name="label" required>
+        <label for="groupKey">{msg:admGroupKeyField}</label>
+        <input type="text" id="groupKey" name="groupKey" required>
+        <label for="sequenceNo">{msg:admSequenceNoField}</label>
+        <input type="number" id="sequenceNo" name="sequenceNo" required>
+        <p><button type="submit">{msg:admAddSeat}</button></p>
+    </form>
+</div>
+
+<div class="card">
+    <h2>{msg:admPricing}</h2>
+    {#if ratePlan}
+        {#if ratePlan.isCalendar}
+        {! .raw on both rate lines: the bold part is the one word on the line that varies, which
+           is what a tenant checking "what am I on" is looking for. !}
+        <p>{msg:admRateByCalendar.raw}</p>
+        <table>
+            <tr><th>{msg:admBand}</th><th>{msg:admPerSeat}</th></tr>
+            {! The band label comes from CalendarPricing, not from the bundle: it is the same
+               vocabulary the rate_rule JSON is keyed on, and translating it here would leave the
+               admin page and the stored rule disagreeing about what a band is called. Its own
+               pass, with the {error} banners. !}
+            {#for band in ratePlan.bands.entrySet}
+            <tr><td>{band.key.label}</td><td>{band.value.fmtMoney}</td></tr>
+            {/for}
+        </table>
+        {! .raw: the anchor is mid-sentence because the list it points at is the subject of the
+           clause, not a footnote to it. !}
+        <p class="muted">{msg:admHolidayBandNote.raw}</p>
+        {#else}
+        <p>{msg:admRateFlat(ratePlan.flatAmount.fmtMoney).raw}</p>
+        {/if}
+        {#if ratePlan.inclusions}
+        <p>{msg:admEveryTicketIncludes}</p>
+        <ul>{#for line in ratePlan.inclusions}<li>{line}</li>{/for}</ul>
+        {/if}
+    {#else}
+    <p class="muted">{msg:admNoRate}</p>
+    {/if}
+
+    {! Two forms rather than one with a mode switch, and deliberately so: a tenant on flat
+       pricing should never be shown four inputs they do not use, and a tenant on calendar
+       pricing should not have to notice a radio button to get them. The `mode` hidden field is
+       the same shape the seat-plan forms above already use. !}
+    <h3>{msg:admSetFlatRate}</h3>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/rate">
+        <input type="hidden" name="mode" value="flat">
+        <label for="amount">{msg:admFlatRateField}</label>
+        <input type="number" id="amount" name="amount" step="1" min="0" required>
+        <label for="flatInclusions">{msg:admInclusionsField}</label>
+        {! The placeholder stays Indonesian in the English page: an operator typing this field is
+           writing what gets printed on a ticket their customer reads, whatever language the
+           chrome around them is in. Msg.admInclusionsPlaceholder says so. !}
+        <textarea id="flatInclusions" name="inclusions" rows="2" cols="40"
+                  placeholder="{msg:admInclusionsPlaceholder}"></textarea>
+        {#if branchHalls.size > 1}
+        <p><label><input type="checkbox" name="applyToBranch" value="on">
+            {msg:admApplyToBranch(branchHalls.size,currentSite.name)}</label></p>
+        {/if}
+        <p><button type="submit">{msg:admSetFlatRateButton}</button></p>
+    </form>
+
+    <h3>{msg:admSetCalendarPricing}</h3>
+    {! .raw: the emphasised clause is the rule people get wrong — they expect the band to apply
+       on the holiday only. !}
+    <p class="muted">{msg:admCalendarPricingNote.raw}</p>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/rate">
+        <input type="hidden" name="mode" value="calendar">
+        <label for="monWed">{msg:admBandMonWed}</label>
+        <input type="number" id="monWed" name="monWed" step="1" min="0" placeholder="25000" required>
+        <label for="thuFri">{msg:admBandThuFri}</label>
+        <input type="number" id="thuFri" name="thuFri" step="1" min="0" placeholder="30000" required>
+        <label for="satSun">{msg:admBandSatSun}</label>
+        <input type="number" id="satSun" name="satSun" step="1" min="0" placeholder="35000" required>
+        <label for="holiday">{msg:admBandHoliday}</label>
+        <input type="number" id="holiday" name="holiday" step="1" min="0" placeholder="35000">
+        <p class="muted">{msg:admBandHolidayBlank}</p>
+        <label for="calendarInclusions">{msg:admInclusionsField}</label>
+        <textarea id="calendarInclusions" name="inclusions" rows="2" cols="40"
+                  placeholder="{msg:admInclusionsPlaceholder}"></textarea>
+        {#if branchHalls.size > 1}
+        {! A.7b obs. 5: a chain sets prices per branch, and setting four bands separately on each
+           studio of a multiplex is exactly where a branch's prices drift apart. !}
+        <p><label><input type="checkbox" name="applyToBranch" value="on">
+            {msg:admApplyToBranch(branchHalls.size,currentSite.name)}</label></p>
+        {/if}
+        <p><button type="submit">{msg:admSetCalendarPricing}</button></p>
+    </form>
+</div>
+
+<div class="card">
+    <h2>{msg:admShowings}</h2>
+    <table>
+        <tr><th>{msg:admLabel}</th><th>{msg:admStarts}</th><th>{msg:admStatus}</th><th></th></tr>
+        {#for showing in showings}
+        <tr>
+            <td>{showing.label}</td>
+            <td>{showing.startsAt.fmtDateTime}</td>
+            {! class= keeps the literal the schema writes because the stylesheet selects on it;
+               the word the reader sees goes through StatusLabels. !}
+            <td><span class="badge {showing.status}">{inject:status.of(showing.status)}</span></td>
+            <td>
+                <a href="/admin/showings/{showing.resourcePoolSessionId}/reservations">{msg:admManageReservations}</a>
+                <a href="/admin/counter/showings/{showing.resourcePoolSessionId}">{msg:admCounterSale}</a>
+                {#if showing.status == 'on_sale'}
+                <form class="inline-form" method="post" action="/admin/showings/{showing.resourcePoolSessionId}/status">
+                    <input type="hidden" name="status" value="closed">
+                    <button type="submit" class="danger">{msg:admCloseSales}</button>
+                </form>
+                {#else if showing.status == 'scheduled'}
+                <form class="inline-form" method="post" action="/admin/showings/{showing.resourcePoolSessionId}/status">
+                    <input type="hidden" name="status" value="on_sale">
+                    <button type="submit">{msg:admOpenForSale}</button>
+                </form>
+                {/if}
+                {#if showing.status != 'cancelled'}
+                <form class="inline-form" method="post" action="/admin/showings/{showing.resourcePoolSessionId}/status">
+                    <input type="hidden" name="status" value="cancelled">
+                    <button type="submit" class="danger">{msg:admCancelShowing}</button>
+                </form>
+                {/if}
+            </td>
+        </tr>
+        {#else}
+        <tr><td colspan="4" class="muted">{msg:admNoShowings}</td></tr>
+        {/for}
+    </table>
+
+    <h3>{msg:admCreateShowingHeading}</h3>
+    <form method="post" action="/admin/halls/{hall.resourcePoolId}/showings">
+        {#if films}
+        <label for="filmId">{msg:admFilm}</label>
+        <select id="filmId" name="filmId">
+            <option value="">{msg:admNoFilmOption}</option>
+            {#for film in films}
+            <option value="{film.filmId}">{film.title}{#if film.classification} ({film.classification}){/if}</option>
+            {/for}
+        </select>
+        <p class="muted">{msg:admPickFilmNote}</p>
+        {/if}
+        <label for="label">{#if films}{msg:admLabelOptional}{#else}{msg:admLabel}{/if}</label>
+        <input type="text" id="label" name="label">
+        <label for="startsAt">{msg:admStartsAt}</label>
+        <input type="datetime-local" id="startsAt" name="startsAt" required>
+        <label for="endsAt">{msg:admEndsAt}</label>
+        <input type="datetime-local" id="endsAt" name="endsAt" required>
+        <p><button type="submit">{msg:admCreateShowing}</button></p>
+    </form>
+</div>
+{/include}

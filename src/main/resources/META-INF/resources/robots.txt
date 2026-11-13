@@ -1,0 +1,31 @@
+User-agent: *
+Allow: /
+
+# Booking platform (the cinema). /admin, /reservations, /orders, /booking, /profile and /chat are
+# behind @RolesAllowed and the other three are the OIDC hops, so a crawler gets a redirect to sign-in
+# rather than content either way. This is crawl budget, not access control — that is the
+# @RolesAllowed, and it is unaffected.
+Disallow: /admin
+Disallow: /reservations
+Disallow: /orders
+Disallow: /booking
+Disallow: /profile
+Disallow: /chat
+Disallow: /login
+Disallow: /callback
+Disallow: /logout
+
+# The cinema's catalogue, generated rather than hand-maintained: showtimes turn over weekly.
+#
+# THE ORIGIN BELOW IS HARDCODED and has to be edited by hand at deploy time. A file served from
+# META-INF/resources cannot read configuration, so this line cannot interpolate
+# PUBLIC_HTTPS_BASE_URL — and it MUST be kept equal to it, because that is where SitemapResource
+# takes its <loc> values from. If the two disagree, the sitemap lists URLs on a host this line
+# does not name and Search Console rejects the lot.
+#
+# Replace `https://example.invalid` with the Cloud Run custom domain (or the run.app URL, without
+# a port — Cloud Run has no second port for the front end to expose).
+Sitemap: https://example.invalid/sitemap-showtimes.xml
+
+# NOTE: there is deliberately no second `Sitemap:` line here. /sitemap.xml does not exist in this
+# application, and advertising it would publish a 404 to every crawler that asks.

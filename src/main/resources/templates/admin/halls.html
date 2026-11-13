@@ -1,0 +1,132 @@
+{#include base}
+{#title}{msg:navTenantAdmin}{/title}
+<h1>{msg:navTenantAdmin}</h1>
+
+<h2>{msg:admBranches}</h2>
+{#for site in sites}
+<div class="card">
+    <h3>{site.name}</h3>
+    <p class="muted">{site.city}{#if site.province}, {site.province}{/if}</p>
+    {#if site.address}<p class="muted">{site.address}</p>{/if}
+</div>
+{#else}
+<p class="muted">{msg:admNoBranches}</p>
+{/for}
+
+<div class="card">
+    <h2>{msg:admAddBranch}</h2>
+    <form method="post" action="/admin/sites">
+        <label for="siteName">{msg:admBranchName}</label>
+        <input type="text" id="siteName" name="name" required>
+        <label for="city">{msg:cityLabel}</label>
+        <input type="text" id="city" name="city" required>
+        <label for="province">{msg:admProvince}</label>
+        <input type="text" id="province" name="province">
+        <label for="siteAddress">{msg:admAddress}</label>
+        <input type="text" id="siteAddress" name="address">
+        <label for="timezone">{msg:admTimezone}</label>
+        {! An IANA zone name, not copy: CalendarPricing parses exactly this string. !}
+        <input type="text" id="timezone" name="timezone" value="Asia/Jakarta">
+        <p><button type="submit">{msg:admCreateBranch}</button></p>
+    </form>
+</div>
+
+<h2>{msg:admFindBooking}</h2>
+<div class="card">
+    <p><a href="/admin/bookings">{msg:admLookUpByCode}</a> &mdash; {msg:admLookUpByCodeNote}</p>
+    <p class="muted">{msg:admDoorInsteadNote}</p>
+</div>
+
+<h2>{msg:admPricingCalendar}</h2>
+<div class="card">
+    <p><a href="/admin/holidays">{msg:admPublicHolidays}</a> &mdash; {msg:admPublicHolidaysNote}</p>
+    <p class="muted">{msg:admPublicHolidaysWhoNeeds}</p>
+</div>
+
+<h2>{msg:admPayments}</h2>
+<div class="card">
+    <p><a href="/admin/payments">{msg:admPaymentsNeedingAttention}</a> &mdash; {msg:admPaymentsNote}</p>
+    <p class="muted">{msg:admPaymentsUsuallyEmpty}</p>
+    {! GET, so the download is a plain link the browser saves; nothing is written. !}
+    <form method="get" action="/admin/payments/sales.csv">
+        <p>{msg:admSalesReportWhat}</p>
+        <label for="salesFrom">{msg:admSalesFrom}</label>
+        <input type="date" id="salesFrom" name="from" required>
+        <label for="salesTo">{msg:admSalesTo}</label>
+        <input type="date" id="salesTo" name="to" required>
+        <p><button type="submit">{msg:admSalesDownload}</button></p>
+    </form>
+</div>
+
+<h2>{msg:admFilms}</h2>
+{#for film in films}
+<div class="card">
+    <h3>{film.title}</h3>
+    <p class="muted">
+        {! LSF's vocabulary — SU, 13+, 17+, 21+ — is not translated. !}
+        {#if film.classification}<span class="badge">{film.classification}</span>{/if}
+        {#if film.durationMinutes}{msg:admFilmRuntime(film.durationMinutes)}{/if}
+    </p>
+</div>
+{#else}
+<p class="muted">{msg:admNoFilms}</p>
+{/for}
+
+<div class="card">
+    <h2>{msg:admAddFilm}</h2>
+    <form method="post" action="/admin/films">
+        <label for="title">{msg:admTitle}</label>
+        <input type="text" id="title" name="title" required>
+        <label for="durationMinutes">{msg:admRuntimeMinutes}</label>
+        <input type="number" id="durationMinutes" name="durationMinutes" min="1">
+        <label for="classification">{msg:admAgeClassification}</label>
+        <select id="classification" name="classification">
+            <option value="">{msg:admNotRecorded}</option>
+            <option value="SU">{msg:admClassificationSu}</option>
+            <option value="13+">13+</option>
+            <option value="17+">17+</option>
+            <option value="21+">21+</option>
+        </select>
+        <label for="synopsis">{msg:admSynopsis}</label>
+        <textarea id="synopsis" name="synopsis" rows="3" cols="40"></textarea>
+        <label for="posterUrl">{msg:admPosterUrl}</label>
+        <input type="url" id="posterUrl" name="posterUrl">
+        <label for="trailerUrl">{msg:admTrailerUrl}</label>
+        <input type="url" id="trailerUrl" name="trailerUrl">
+        <label for="releaseDate">{msg:admReleaseDate}</label>
+        <input type="date" id="releaseDate" name="releaseDate">
+        <p><button type="submit">{msg:admCreateFilm}</button></p>
+    </form>
+</div>
+
+<h2>{msg:admHalls}</h2>
+{#for hall in halls}
+<div class="card">
+    <h3><a href="/admin/halls/{hall.resourcePoolId}">{hall.name}</a></h3>
+    {#if hall.address}<p class="muted">{hall.address}</p>{/if}
+    {#if !hall.siteId}<p class="muted">{msg:admNotAssignedToBranch}</p>{/if}
+</div>
+{#else}
+<p class="muted">{msg:admNoHalls}</p>
+{/for}
+
+<div class="card">
+    <h2>{msg:admAddHall}</h2>
+    <form method="post" action="/admin/halls">
+        <label for="name">{msg:admName}</label>
+        <input type="text" id="name" name="name" required>
+        <label for="address">{msg:admAddress}</label>
+        <input type="text" id="address" name="address">
+        {#if sites}
+        <label for="siteId">{msg:admBranch}</label>
+        <select id="siteId" name="siteId">
+            <option value="">{msg:admNoneOption}</option>
+            {#for site in sites}
+            <option value="{site.siteId}">{site.name} ({site.city})</option>
+            {/for}
+        </select>
+        {/if}
+        <p><button type="submit">{msg:admCreateHall}</button></p>
+    </form>
+</div>
+{/include}

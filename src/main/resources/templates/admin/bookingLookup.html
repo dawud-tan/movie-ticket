@@ -1,0 +1,33 @@
+{! The counter's way into a booking from the code a customer read down the phone.
+
+   A GET form with the code in the query string, not a POST: looking a booking up changes nothing,
+   and a staff member who finds the right booking should be able to bookmark or re-run the search
+   from history rather than re-typing eight characters while someone waits on the line.
+
+   Only ever rendered for a miss or an empty form — a hit redirects straight to the booking page,
+   which already shows everything staff need to act on. See ReservationAdminResource.findBooking.
+
+   NO LANGUAGE PREFIX on the links out of here, and the rule is robots.txt's: /admin is
+   disallowed there, so /id/admin would be a second spelling that list does not cover. What
+   keeps this page in the reader's language is the cookie. Same as customer/orders.html. !}
+{#include base}
+{#title}{msg:admFindBooking}{/title}
+<p><a href="/admin">&larr; {msg:navTenantAdmin}</a></p>
+<h1>{msg:admFindBooking}</h1>
+
+<div class="card">
+    <form method="get" action="/admin/bookings">
+        <label for="code">{msg:admBookingCode}</label>
+        {! Not autocapitalised by the browser but uppercased on the way in — the lookup normalises
+           case and strips the hyphens and spaces people use to group eight characters when reading
+           them aloud, so anything the customer says works. See BookingService. !}
+        <input type="text" id="code" name="code" value="{code}" autofocus
+               placeholder="K7M2QPRT" autocomplete="off">
+        <p><button type="submit">{msg:admFindBookingButton}</button></p>
+    </form>
+    {#if message}
+    <p class="error-banner">{message}</p>
+    <p class="muted">{msg:admBookingCodeAlphabet}</p>
+    {/if}
+</div>
+{/include}

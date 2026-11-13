@@ -1,0 +1,58 @@
+{#include base}
+{#title}{msg:admPublicHolidays} — {msg:navTenantAdmin}{/title}
+<p><a href="/admin">&larr; {msg:navTenantAdmin}</a></p>
+<h1>{msg:admPublicHolidays}</h1>
+
+{! Still English: whatever the service layer threw. !}
+{#if error}
+<div class="error-banner">{error}</div>
+{/if}
+
+{! Why this page exists, in the words staff need rather than the words the design notes use.
+   The list is a pricing input: it is what makes "public holiday and the day before one" a band
+   the system can charge, and nothing else in the product can work it out.
+
+   Both paragraphs are .raw because their emphasis is the meaning — "the day before it" is the
+   half a reader does not expect, and <em>cuti bersama</em> stays Indonesian in the English page
+   because it is the name of a thing a decree creates. Msg.java has the rule. !}
+<div class="card">
+    <p>{msg:admHolidaysWhat.raw}</p>
+    <p class="muted">{msg:admHolidaysMoveable.raw}</p>
+</div>
+
+<div class="card">
+    <h2>{msg:admAddDate}</h2>
+    <form method="post" action="/admin/holidays">
+        <label for="holidayDate">{msg:admDate}</label>
+        <input type="date" id="holidayDate" name="holidayDate" required>
+        <label for="name">{msg:admName}</label>
+        {! The placeholder is a holiday's name, so it reads the same in both languages — same
+           rule as the inclusions placeholder on hallDetail.html. !}
+        <input type="text" id="name" name="name" placeholder="Hari Raya Idul Fitri" required>
+        <p class="muted">{msg:admTwoHolidaysOneDay}</p>
+        <p><button type="submit">{msg:admAdd}</button></p>
+    </form>
+</div>
+
+<div class="card">
+    <h2>{msg:admThisYearOnward}</h2>
+    <table>
+        <tr><th>{msg:admDate}</th><th>{msg:admName}</th><th></th></tr>
+        {#for holiday in holidays}
+        <tr>
+            {! The weekday is shown deliberately: it is what the band is keyed on, and it is how
+               staff spot that the eve they meant to cover is the date they typed. !}
+            <td>{holiday.holidayDate.fmtDate}</td>
+            <td>{holiday.name}</td>
+            <td>
+                <form method="post" action="/admin/holidays/{holiday.publicHolidayId}/delete">
+                    <button type="submit" class="danger">{msg:admRemove}</button>
+                </form>
+            </td>
+        </tr>
+        {#else}
+        <tr><td colspan="3" class="muted">{msg:admNoHolidays}</td></tr>
+        {/for}
+    </table>
+</div>
+{/include}

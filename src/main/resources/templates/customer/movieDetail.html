@@ -1,0 +1,61 @@
+{#include base}
+{#title}{film.title}{/title}
+{#head}{#include seoHead /}{/head}
+<p><a href="{inject:lang.path('/movies')}">&larr; {msg:navNowPlaying}</a></p>
+
+{#if film.posterUrl}<p><img src="{film.posterUrl}" alt="{msg:filmPosterAlt(film.title)}" width="220"></p>{/if}
+<h1>{film.title}</h1>
+<p class="muted">
+    {#if film.classification}<span class="badge">{film.classification}</span>{/if}
+    {#if film.durationMinutes}{msg:filmDuration(film.durationMinutes)}{/if}
+    {#if film.releaseDate}— {msg:movieReleased(film.releaseDate)}{/if}
+</p>
+{#if film.synopsis}<p>{film.synopsis}</p>{/if}
+{#if film.trailerUrl}<p><a href="{film.trailerUrl}">{msg:movieTrailer}</a></p>{/if}
+
+<h2>{msg:movieWherePlaying}</h2>
+{!
+  The cinemas are the list, and picking one opens its showtimes underneath.
+
+  The strip is fetched rather than rendered from rows this page already holds, so that BOTH menus
+  open the same fragment from the same query. Two renderings of a showtime strip would be two
+  places for "is this on sale" to drift apart, and the film page is the one a customer reaches
+  from a shared link — the one most likely to be looked at while the schedule is changing.
+
+  The hx-get carries the language prefix for the reason cinemaDetail.html spells out: a fragment
+  fetched bare falls through to the cookie and then to Accept-Language, so a cookie-less visitor
+  who arrived on /id would get English swapped into an Indonesian page.
+!}
+{#for cinema in cinemas}
+<div class="card">
+    <h3><a href="{inject:lang.path('/cinemas/')}{cinema.slug}">{cinema.name}</a> <span class="muted">— {cinema.city}</span></h3>
+    {#if cinema.address}<p class="muted">{cinema.address}</p>{/if}
+    <p>
+        <button type="button" class="showtimes-toggle"
+                hx-get="{inject:lang.path('/movies/')}{film.slug}/cinemas/{cinema.slug}"
+                hx-target="#showtimes-{cinema.siteId}"
+                hx-swap="innerHTML">{msg:showTimes}</button>
+    </p>
+    <div id="showtimes-{cinema.siteId}"></div>
+</div>
+{/for}
+
+{#if unassigned}
+<div class="card">
+    {! The same two words as home.html's own unassigned block, from the same key: both name the
+       same condition, and a second key would let them disagree in one language only. !}
+    <h3>{msg:homeUnassignedHeading}</h3>
+    <p class="muted">{msg:movieUnassignedHint}</p>
+    {#for showing in unassigned}
+    <p>
+        {showing.startsAt.fmtDateTime} — {showing.hallName}
+        <a href="{inject:lang.path('/halls/')}{showing.resourcePoolId}/showings/{showing.resourcePoolSessionId}">{msg:chooseSeats}</a>
+    </p>
+    {/for}
+</div>
+{/if}
+
+{#if cinemas.isEmpty && unassigned.isEmpty}
+<p class="muted">{msg:noUpcomingShowings}</p>
+{/if}
+{/include}

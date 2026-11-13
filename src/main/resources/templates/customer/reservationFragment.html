@@ -1,0 +1,243 @@
+{! The booking's live state: seats, their statuses, and the payment card.
+
+   Polled by htmx while a QRIS charge is outstanding, so a customer who has scanned the QR sees
+   their seats go confirmed without pressing anything. Before this, the page offered a manual
+   "Refresh" link and the copy below promised confirmation "automatically" — which was true of the
+   booking and false of the page.
+
+   WHY THE WHOLE FRAGMENT AND NOT JUST THE PAYMENT CARD: settlement changes both halves at once.
+   The payment becomes paid AND every seat goes held -> confirmed, so swapping only the payment
+   card would leave the table above it contradicting it.
+
+   WHY THE POLLING ATTRIBUTES ARE CONDITIONAL: once the payment is terminal this fragment renders
+   without hx-get/hx-trigger, htmx has nothing left to schedule, and the polling stops of its own
+   accord. No JavaScript decides when to stop, and nothing has to remember to cancel a timer — the
+   same markup-drives-behaviour principle the seat map's revert relies on. A stuck poll
+   would otherwise run for as long as the tab stayed open.
+
+   A failed poll is cosmetic, not a correctness problem. Settlement is applied by the BI-SNAP
+   notification server-side; this page only reports it. If the poll 401s because
+   an OIDC session expired mid-wait, the seats are still confirmed — the customer just will not see
+   it until they reload. !}
+<div id="reservation-status"
+     {#if payment && payment.status == 'pending' && payment.qrisContent && detail.showing.status != 'cancelled'}
+     hx-get="/orders/{detail.group.reservationGroupId}/fragment"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     {/if}>
+
+<div class="card">
+    {! The booking code, above the status because it is what a customer is asked for when
+       they ring the cinema — and what staff type into /admin/bookings to find this page again.
+       Quotable on purpose and harmless to show: it opens no door. The credential that does is
+       the per-seat barcode further down, and the two are deliberately different values. !}
+    <p class="ticket-code">{detail.group.bookingCode}</p>
+    <p class="muted">{msg:orderQuoteCode}</p>
+    {! The class keeps the raw column value the stylesheet selects on; only the label is
+       translated. StatusLabels says why they cannot be the same expression. !}
+    <p>{msg:orderBookingStatus}: <span class="badge {detail.group.status}">{inject:status.of(detail.group.status)}</span></p>
+    {#if detail.group.status == 'failed'}
+    <div class="error-banner">{msg:orderFailedBanner}</div>
+    {/if}
+
+    <table>
+        <tr><th>{msg:orderTableSeat}</th><th>{msg:orderTableStatus}</th><th>{msg:orderTablePrice}</th><th></th></tr>
+        {#for line in detail.lines}
+        <tr>
+            <td>{line.seat.label}</td>
+            <td>
+                <span class="badge {line.reservation.status}">{inject:status.of(line.reservation.status)}</span>
+                {#if line.reservation.status == 'held'}
+                <div class="muted">{msg:orderHoldExpires(line.reservation.holdExpiresAt.fmtDateTime)}</div>
+                {/if}
+            </td>
+            <td>{line.reservation.priceAmount.fmtMoney}</td>
+            <td>
+                {#if line.reservation.status == 'held' || line.reservation.status == 'confirmed'}
+                {! Once a payment has settled, only staff may cancel. Hiding the
+                   button is UX and not the boundary — BookingService.assertMayCancelSettled is
+                   what actually refuses, and it refuses whether or not this markup rendered.
+                   Cancelling an unpaid hold stays a customer action. !}
+                {#if inject:actor.isStaff || !payment || payment.status != 'paid'}
+                <form method="post" action="/orders/{detail.group.reservationGroupId}/items/{line.reservation.reservationId}/cancel">
+                    <button type="submit" class="danger">{msg:orderCancelSeat}</button>
+                </form>
+                {#else}
+                <span class="muted">{msg:orderContactCinemaToCancel}</span>
+                {/if}
+                {/if}
+            </td>
+        </tr>
+        {/for}
+    </table>
+    {! Read from the rate rule in force when this booking was taken, not today's -- a
+       ticket must not be restated in terms the customer never bought. !}
+    {#if detail.inclusions}
+    <p>{msg:orderTicketIncludes}</p>
+    <ul>{#for line in detail.inclusions}<li>{line}</li>{/for}</ul>
+    {/if}
+</div>
+
+{! Payment. Three states, and which one shows is driven entirely by data
+   rather than by a flag the page sets: an existing pending charge means show the QR and wait
+   for the webhook; a paid charge means say so; no charge yet on a pending group means offer
+   the ways to pay that are actually available. !}
+{! Staff cancelled the showing: no QR and no pay button, only what
+   happened and what is owed back. A QR still open settles into a refund owed (PaymentService). !}
+{#if detail.showing.status == 'cancelled'}
+<div class="card">
+    <h2>{msg:orderShowingCancelled}</h2>
+    <p>{msg:orderShowingCancelledNote}</p>
+    {#if payment && payment.hasOutstandingRefund}<p>{msg:payRefundOwed(payment.refundDueAmount.fmtMoney)}</p>{/if}
+    {#if payment && payment.hasReturned}<p>{msg:payRefundReturned(payment.returnedAmount.fmtMoney, payment.returnedAt.fmtDateTime)}</p>{/if}
+</div>
+{#else if payment && payment.status == 'pending' && payment.qrisContent}
+<div class="card">
+    <h2>{msg:payScanToPay}</h2>
+    <p>{payment.amount.fmtMoney} &mdash; {msg:payExpires(payment.expiresAt.fmtDateTime)}</p>
+    {! Midtrans hosts the rendered QR image, so this needs no QR-encoding library — one fewer
+       dependency, and one fewer thing to get wrong about a payment instrument. !}
+    <p><img src="{payment.qrisContent}" alt="{msg:payQrisAlt}" class="qris-code"></p>
+    <p class="muted">{msg:payQrisHint}</p>
+    <p class="muted">{msg:payQrisSamePhone}</p>
+</div>
+{#else if payment && payment.status == 'paid'}
+{! A debt owed back (`refund_due_amount`) heads the card: a QR paid after it expired confirms no seat, and a cancelled
+   showing or seat keeps the payment 'paid', so "Paid" alone would read as a ticket. !}
+<div class="card">
+    <h2>{#if payment.hasOutstandingRefund}{msg:payRefundHeading}{#else}{msg:payPaidHeading}{/if}</h2>
+    <p>{msg:payReceived(payment.amount.fmtMoney, payment.paidAt.fmtDateTime)}{#if payment.paymentChannel == 'cash'} {msg:payCashAtCounter}{/if}.</p>
+    {#if payment.hasOutstandingRefund}<p>{msg:payRefundOwed(payment.refundDueAmount.fmtMoney)}</p>{/if}
+    {! a refund the gateway sent replaces the owed line, and shows beside it while part is still owed. !}
+    {#if payment.hasReturned}<p>{msg:payRefundReturned(payment.returnedAmount.fmtMoney, payment.returnedAt.fmtDateTime)}</p>{/if}
+</div>
+{#else if payment && (payment.status == 'expired' || payment.status == 'failed')}
+{! Reached by polling: the customer was watching the QR when it timed out. Saying so beats leaving
+   a dead QR on screen, and the seats may still be held — their own expiry is separate. !}
+<div class="card">
+    <h2>{msg:payNotCompleted}</h2>
+    {! Two whole sentences rather than one with the status dropped into it: the two words differ
+       in more than the verb once translated, and interpolating the raw column value would put an
+       English word inside the Indonesian sentence. Msg.payQrExpiredNote carries the argument. !}
+    <p class="muted">{#if payment.status == 'expired'}{msg:payQrExpiredNote}{#else}{msg:payQrFailedNote}{/if}</p>
+    {#if inject:actor.isStaff}
+    {! The counter's two buttons, as on the unpaid card below. !}
+    <form method="post" action="/admin/counter/reservations/{detail.group.reservationGroupId}/cash">
+        <button type="submit">{msg:payCashReceived}</button>
+    </form>
+    {#if paymentEnabled}
+    <form method="post" action="/admin/counter/reservations/{detail.group.reservationGroupId}/qris">
+        <button type="submit">{msg:payShowQris}</button>
+    </form>
+    {/if}
+    {#else}
+    <form method="post" action="/orders/{detail.group.reservationGroupId}/pay">
+        <button type="submit">{msg:payTryAgain}</button>
+    </form>
+    {/if}
+</div>
+{#else if detail.group.status == 'pending'}
+<div class="card">
+    <h2>{msg:payHeading}</h2>
+    {! Staff get the counter's buttons in place of the customer's. With only the customer's,
+       staff's "pay at counter" confirmed with no payment row, so the takings went unrecorded,
+       and their QRIS was recorded as trigger_point 'online'. !}
+    {#if inject:actor.isStaff}
+    <form method="post" action="/admin/counter/reservations/{detail.group.reservationGroupId}/cash">
+        <button type="submit">{msg:payCashReceived}</button>
+    </form>
+    {#if paymentEnabled}
+    <form method="post" action="/admin/counter/reservations/{detail.group.reservationGroupId}/qris">
+        <button type="submit">{msg:payShowQris}</button>
+    </form>
+    {/if}
+    {#else if paymentEnabled}
+    <form method="post" action="/orders/{detail.group.reservationGroupId}/pay">
+        <button type="submit">{msg:payNowQris}</button>
+    </form>
+    <p class="muted">{msg:payOrCounter}</p>
+    {#else}
+    {! No Midtrans credentials configured: the pay-at-counter path is the
+       only one available, and the page says so rather than offering a button that cannot work. !}
+    <p class="muted">{msg:payNotConfigured}</p>
+    {/if}
+    {#if !inject:actor.isStaff}
+    <form method="post" action="/orders/{detail.group.reservationGroupId}/confirm">
+        <button type="submit">{msg:payConfirmAtCounter}</button>
+    </form>
+    {/if}
+</div>
+{/if}
+
+{! the buyer's own push, opt-in, for the showing cancelled and the refund sent or refused
+   (order-push.js). Customers only: OrderPush refuses staff, whose device is the wrong one to tell.
+   hx-preserve with its id, so the 3 s poll above swaps the fragment around it and keeps what the
+   script did to it; the button stays hidden until the script finds push configured. !}
+{#if inject:actor.isCustomer}
+<div id="order-push" hx-preserve="true" data-group-id="{detail.group.reservationGroupId}"
+     data-msg-watch="{msg:orderPushWatch}" data-msg-unwatch="{msg:orderPushUnwatch}"
+     data-msg-on="{msg:orderPushOn}" data-msg-stopped="{msg:orderPushStopped}"
+     data-msg-refused="{msg:orderPushRefused}" data-msg-failed="{msg:orderPushFailed}">
+    <button type="button" id="order-push-toggle" class="button-secondary" hidden>{msg:orderPushWatch}</button>
+    <p id="order-push-status" class="muted" role="status"></p>
+</div>
+{/if}
+
+{! THE TICKET. Rendered only for seats that are actually confirmed — admissionLines()
+   decides that in Java, so this card and the barcodes inside it cannot disagree about which
+   seats have one.
+
+   This is the artifact, and the web page around it is no longer the proof of purchase: before
+   the admission token the customer's only evidence at the door was this URL, behind OIDC, which means logging in
+   over cinema wifi while a queue waits. The barcode works with the phone in aeroplane mode, and
+   the code beneath it works when the phone is flat and someone reads it aloud.
+
+   IT ALSO COVERS THE COUNTER SALE, which is the case that otherwise has nobody to send a ticket
+   to: a walk-in attaches to the tenant's walkInPlaceholder customer and has no login, no device
+   and no email. Staff land on this page after settling cash (CounterSaleResource routes here) and
+   print it. That is why the print rules in app.css are not cosmetic — the site is dark-themed,
+   and an unstyled print of a dark page gives a customer a sheet of paper with an invisible
+   barcode on it. !}
+{#if detail.admissionLines}
+<div class="card ticket-card">
+    <h2>{msg:ticketHeading(detail.admissionLines.size)}</h2>
+    <p class="muted">{msg:ticketShowAtDoor}</p>
+    {#for line in detail.admissionLines}
+    <div class="ticket">
+        <p class="ticket-seat">{detail.hall.name} &middot; {msg:ticketSeatLabel(line.seat.label)}</p>
+        {! Inline SVG rather than an <img>: see TemplateExtensions.admissionBarcode. .raw because
+           the extension emits markup it has already escaped the token into. !}
+        {line.reservation.admissionBarcode.raw}
+        <p class="ticket-code">{line.reservation.admissionToken}</p>
+        {! ADD TO GOOGLE WALLET, and it is additive to everything above rather than
+           an alternative to it. The barcode is the ticket: it works in aeroplane mode, it prints,
+           and it is what the counter hands a walk-in who has no phone to save anything to. iOS
+           gets no pass at all, so this can never become the path.
+
+           One link per SEAT, not per booking, because the whole pass travels inside the link:
+           eight seats in one JWT would push the URL past what a browser will carry, and a family
+           booking is exactly when that would happen. WalletPass.MAX_SAVE_URL_LENGTH is the
+           ceiling, and a seat whose link crosses it simply has no button while its neighbours
+           keep theirs.
+
+           Absent on every deployment until someone creates the issuer account — the map is empty
+           without booking.wallet.issuer-id, so this whole block disappears and the card is what
+           it was before. rel="noopener" because target is not set but the destination is Google's
+           and the page carries a barcode somebody is about to be admitted with. !}
+        {#let walletUrl=walletLinks.get(line.reservation.reservationId)}
+        {#if walletUrl}
+        <p class="ticket-wallet"><a class="button-secondary" href="{walletUrl}" rel="noopener">{msg:ticketAddToWallet}</a></p>
+        {/if}
+        {/let}
+        {#if line.reservation.admitted}
+        {! Once used, say so here too. A customer who wonders whether their party already went in
+           should not have to ask an usher, and a ticket that silently looks unused after entry is
+           the thing that starts an argument at the door. !}
+        <p class="muted">{msg:ticketAdmitted(line.reservation.admittedAt.fmtDateTime)}</p>
+        {/if}
+    </div>
+    {/for}
+</div>
+{/if}
+
+</div>
